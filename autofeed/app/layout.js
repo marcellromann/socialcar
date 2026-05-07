@@ -8,6 +8,9 @@ const barlow = Barlow({
   weight: ['400', '500', '600', '700'],
   variable: '--font-barlow',
   display: 'swap',
+  fallback: ['ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+  adjustFontFallback: false,
+  preload: true,
 });
 
 const barlowCondensed = Barlow_Condensed({
@@ -15,6 +18,9 @@ const barlowCondensed = Barlow_Condensed({
   weight: ['500', '600', '700', '800', '900'],
   variable: '--font-barlow-condensed',
   display: 'swap',
+  fallback: ['ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+  adjustFontFallback: false,
+  preload: true,
 });
 
 export const metadata = {
