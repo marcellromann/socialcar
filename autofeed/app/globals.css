@@ -6,16 +6,33 @@
   color-scheme: dark;
   --color-brand: #AAFF00;
   --color-page: #060801;
+  --bottom-nav-h: 72px;
 }
 
 html, body {
   background: var(--color-page);
   color: #ffffff;
+  overscroll-behavior-y: none;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
 }
 
 ::selection {
   background: var(--color-brand);
   color: #000000;
+}
+
+/* Trilhos visuais que enquadram a app em até 480px */
+.shell {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  position: relative;
+  min-height: 100dvh;
+  background: var(--color-page);
 }
 
 @layer components {
@@ -26,30 +43,50 @@ html, body {
     @apply font-display uppercase tracking-tight leading-[0.95];
   }
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-md bg-brand-500 px-5 py-2.5 text-sm font-bold uppercase tracking-wide text-black shadow-sm transition hover:bg-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-page disabled:opacity-60 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-brand-500 px-5 py-3 text-sm font-bold uppercase tracking-wide text-black transition active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed;
   }
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-md border border-brand-500/60 bg-transparent px-5 py-2.5 text-sm font-bold uppercase tracking-wide text-brand-500 transition hover:bg-brand-500/10 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-page;
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-brand-500/60 bg-transparent px-5 py-3 text-sm font-bold uppercase tracking-wide text-brand-500 transition active:scale-95;
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold uppercase tracking-wide text-slate-300 transition hover:text-brand-500;
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-3 py-2 text-sm font-semibold uppercase tracking-wide text-slate-300 transition hover:text-brand-500;
   }
   .input {
-    @apply block w-full rounded-md border border-outline bg-page px-3 py-2 text-sm text-white shadow-sm placeholder:text-slate-500 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30;
+    @apply block w-full rounded-xl border border-outline bg-card px-4 py-3 text-base text-white placeholder:text-slate-500 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30;
   }
   .label {
-    @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-300;
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-300;
   }
   .card {
-    @apply rounded-lg border border-outline bg-card shadow-sm;
+    @apply rounded-2xl border border-outline bg-card;
   }
   .chip {
-    @apply inline-flex items-center gap-1 rounded-full border border-outline bg-elevated px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-300;
+    @apply inline-flex items-center gap-1 rounded-full border border-outline bg-elevated px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-300;
+  }
+  .chip-active {
+    @apply inline-flex items-center gap-1 rounded-full border border-brand-500 bg-brand-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-500;
   }
   .section-title {
-    @apply font-display text-3xl font-bold uppercase tracking-tight text-white sm:text-4xl;
+    @apply font-display text-2xl font-bold uppercase tracking-tight text-white;
   }
   .section-eyebrow {
     @apply font-display text-xs font-bold uppercase tracking-[0.2em] text-brand-500;
   }
+  .page-pad {
+    @apply px-4 pt-4 pb-[calc(var(--bottom-nav-h)+24px)];
+  }
 }
+
+/* Animações de feedback do swipe */
+@keyframes flyout-right {
+  to { transform: translate(140%, -10%) rotate(20deg); opacity: 0; }
+}
+@keyframes flyout-left {
+  to { transform: translate(-140%, -10%) rotate(-20deg); opacity: 0; }
+}
+.flyout-right { animation: flyout-right 280ms ease forwards; }
+.flyout-left  { animation: flyout-left 280ms ease forwards; }
+
+/* Esconde scrollbars em listas horizontais */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }

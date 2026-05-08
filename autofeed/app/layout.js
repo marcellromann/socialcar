@@ -1,7 +1,7 @@
 import './globals.css';
 import { Barlow, Barlow_Condensed } from 'next/font/google';
-import Footer from '@/components/Footer';
-import Navbar from '@/components/Navbar';
+import BottomNav from '@/components/BottomNav';
+import { AuthProvider } from '@/lib/auth';
 
 const barlow = Barlow({
   subsets: ['latin'],
@@ -24,17 +24,28 @@ const barlowCondensed = Barlow_Condensed({
 });
 
 export const metadata = {
-  title: 'SocialCar — Marketplace automotivo',
-  description: 'Compre e venda carros usados com facilidade na SocialCar.',
+  title: 'SocialCar — Compra e venda de carros',
+  description: 'Marketplace mobile de carros usados com perfil inteligente do comprador.',
+};
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#060801',
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="pt-BR" className={`dark ${barlow.variable} ${barlowCondensed.variable}`}>
-      <body className="min-h-screen flex flex-col bg-page text-white antialiased font-sans">
-        <Navbar />
-        <main className="flex-1">{children}</main>
-        <Footer />
+      <body className="bg-page font-sans text-white antialiased">
+        <AuthProvider>
+          <div className="shell">
+            {children}
+            <BottomNav />
+          </div>
+        </AuthProvider>
       </body>
     </html>
   );

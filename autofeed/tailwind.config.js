@@ -25,6 +25,12 @@ module.exports = {
         sans: ['var(--font-barlow)', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
         display: ['var(--font-barlow-condensed)', 'var(--font-barlow)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
+      maxWidth: {
+        mobile: '480px',
+      },
+      height: {
+        'screen-mobile': '100dvh',
+      },
     },
   },
   plugins: [],
