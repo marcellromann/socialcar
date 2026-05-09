@@ -35,14 +35,25 @@ function Runner() {
     (async () => {
       if (!appUser?.id) return;
       const listingId = params.get('listing');
+      const buyerParam = params.get('buyer');
       if (!listingId) { router.replace('/chats'); return; }
 
-      const buyerId = appUser.id;
+      const me = appUser.id;
 
       const { data: l } = await supabase
         .from('listings').select('user_id').eq('id', listingId).maybeSingle();
-      const sellerId = l?.user_id;
-      if (!sellerId || sellerId === buyerId) { router.replace('/chats'); return; }
+      if (!l) { router.replace('/chats'); return; }
+
+      let buyerId, sellerId;
+      if (l.user_id === me) {
+        // Vendedor inicia: comprador vem na query.
+        if (!buyerParam || buyerParam === me) { router.replace('/meus-anuncios'); return; }
+        buyerId = buyerParam;
+        sellerId = me;
+      } else {
+        buyerId = me;
+        sellerId = l.user_id;
+      }
 
       const { data: existingChat } = await supabase
         .from('chats').select('id')

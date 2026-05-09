@@ -1,19 +1,60 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { useAuth } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
 
 const ITEMS = [
   { href: '/', label: 'Feed', icon: IconFlame },
   { href: '/buscar', label: 'Buscar', icon: IconSearch },
   { href: '/anunciar', label: 'Anunciar', icon: IconPlus, primary: true },
-  { href: '/chats', label: 'Chats', icon: IconChat },
+  { href: '/chats', label: 'Chats', icon: IconChat, key: 'chats' },
   { href: '/perfil', label: 'Perfil', icon: IconUser },
 ];
 
 export default function BottomNav() {
   const pathname = usePathname() || '/';
+  const { appUser } = useAuth();
+  const [unread, setUnread] = useState(0);
+
   const hidden = pathname.startsWith('/onboarding') || pathname.startsWith('/entrar') || pathname.startsWith('/cadastro');
+
+  useEffect(() => {
+    if (hidden || !appUser?.id) { setUnread(0); return; }
+    let cancel = false;
+    let timer;
+
+    async function refresh() {
+      const me = appUser.id;
+      const { data: chats } = await supabase
+        .from('chats')
+        .select('id, buyer_id, seller_id, last_read_buyer_at, last_read_seller_at')
+        .or(`buyer_id.eq.${me},seller_id.eq.${me}`);
+      if (!chats?.length) { if (!cancel) setUnread(0); return; }
+      const ids = chats.map((c) => c.id);
+      const { data: msgs } = await supabase
+        .from('messages')
+        .select('chat_id, sender_id, created_at')
+        .in('chat_id', ids);
+
+      let count = 0;
+      for (const c of chats) {
+        const lr = me === c.buyer_id ? c.last_read_buyer_at : c.last_read_seller_at;
+        const lrTs = lr ? new Date(lr).getTime() : 0;
+        for (const m of msgs || []) {
+          if (m.chat_id === c.id && m.sender_id !== me && new Date(m.created_at).getTime() > lrTs) count++;
+        }
+      }
+      if (!cancel) setUnread(count);
+    }
+
+    refresh();
+    timer = setInterval(refresh, 30_000);
+    return () => { cancel = true; clearInterval(timer); };
+  }, [hidden, appUser?.id, pathname]);
+
   if (hidden) return null;
 
   return (
@@ -22,7 +63,7 @@ export default function BottomNav() {
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <ul className="flex h-[var(--bottom-nav-h)] items-center justify-around px-2">
-        {ITEMS.map(({ href, label, icon: Icon, primary }) => {
+        {ITEMS.map(({ href, label, icon: Icon, primary, key }) => {
           const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
           if (primary) {
             return (
@@ -37,15 +78,23 @@ export default function BottomNav() {
               </li>
             );
           }
+          const showBadge = key === 'chats' && unread > 0;
           return (
             <li key={href} className="flex-1">
               <Link
                 href={href}
-                className={`flex flex-col items-center gap-1 py-2 text-[10px] font-bold uppercase tracking-wide transition ${
+                className={`relative flex flex-col items-center gap-1 py-2 text-[10px] font-bold uppercase tracking-wide transition ${
                   active ? 'text-brand-500' : 'text-slate-400'
                 }`}
               >
-                <Icon size={22} />
+                <span className="relative">
+                  <Icon size={22} />
+                  {showBadge && (
+                    <span className="absolute -right-2 -top-1 grid h-4 min-w-[16px] place-items-center rounded-full bg-brand-500 px-1 text-[9px] font-black text-black">
+                      {unread > 9 ? '9+' : unread}
+                    </span>
+                  )}
+                </span>
                 {label}
               </Link>
             </li>

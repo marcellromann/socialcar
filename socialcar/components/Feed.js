@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import SwipeCard from './SwipeCard';
 import { useAuth } from '@/lib/auth';
@@ -11,28 +11,29 @@ export default function Feed({ initialListings = [] }) {
   const { appUser } = useAuth();
   const [stack, setStack] = useState(initialListings);
   const [saved, setSaved] = useState([]);
+  const seenRef = useRef(new Set());
 
   const top = stack[0];
   const next = stack[1];
   const third = stack[2];
-
   const empty = stack.length === 0;
 
-  async function recordInterest(listingId) {
-    if (!appUser?.id) return;
-    try {
-      await supabase
-        .from('interests')
-        .insert({ buyer_id: appUser.id, listing_id: listingId })
-        .select();
-    } catch {}
-  }
+  // View: dispara uma única vez por listing por sessão.
+  useEffect(() => {
+    if (!top) return;
+    if (seenRef.current.has(top.id)) return;
+    seenRef.current.add(top.id);
+    recordEvent(top.id, 'view', appUser?.id);
+  }, [top, appUser?.id]);
 
   function handleSwipe(direction, listing) {
     setStack((s) => s.slice(1));
     if (direction === 'right') {
-      recordInterest(listing.id);
+      recordEvent(listing.id, 'interest', appUser?.id);
+      recordInterest(listing.id, appUser?.id);
       router.push(`/anuncio/${listing.id}`);
+    } else {
+      recordEvent(listing.id, 'pass', appUser?.id);
     }
   }
 
@@ -41,7 +42,10 @@ export default function Feed({ initialListings = [] }) {
     if (action === 'pass')     handleSwipe('left', top);
     if (action === 'interest') handleSwipe('right', top);
     if (action === 'chat')     router.push(`/chats/novo?listing=${top.id}`);
-    if (action === 'save')     setSaved((s) => [...s, top.id]);
+    if (action === 'save') {
+      recordEvent(top.id, 'save', appUser?.id);
+      setSaved((s) => [...s, top.id]);
+    }
   }
 
   return (
@@ -86,6 +90,26 @@ export default function Feed({ initialListings = [] }) {
       )}
     </div>
   );
+}
+
+async function recordEvent(listingId, tipo, userId) {
+  try {
+    await supabase.from('listing_events').insert({
+      listing_id: listingId,
+      user_id: userId || null,
+      tipo,
+    });
+  } catch {}
+}
+
+async function recordInterest(listingId, userId) {
+  if (!userId) return;
+  try {
+    await supabase
+      .from('interests')
+      .insert({ buyer_id: userId, listing_id: listingId })
+      .select();
+  } catch {}
 }
 
 function CircleButton({ children, label, onClick, variant = 'ghost', big = false, disabled }) {

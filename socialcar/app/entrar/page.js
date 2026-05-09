@@ -4,6 +4,7 @@ import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Logo from '@/components/Logo';
+import PasswordInput from '@/components/PasswordInput';
 import { supabase } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
@@ -93,13 +94,11 @@ function EntrarForm() {
           </div>
           <div>
             <label className="label" htmlFor="password">Senha</label>
-            <input
+            <PasswordInput
               id="password"
-              type="password"
               autoComplete="current-password"
               required
               minLength={6}
-              className="input"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />

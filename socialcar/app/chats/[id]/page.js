@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import RequireAuth from '@/components/RequireAuth';
 import TopBar from '@/components/TopBar';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
-import { summarizeBuyer } from '@/lib/format';
+import { buyerAlias, computeMatch } from '@/lib/anon';
+import { formatPrice, summarizeBuyer } from '@/lib/format';
 
 export default function ChatPage() {
   return (
@@ -38,7 +40,7 @@ function Inner() {
 
       if (c?.listing_id) {
         const { data: l } = await supabase.from('listings_public')
-          .select('id, marca, modelo, foto_principal_url')
+          .select('id, marca, modelo, ano, preco, foto_principal_url, combustivel, estado')
           .eq('id', c.listing_id).maybeSingle();
         setListing(l);
       }
@@ -53,9 +55,19 @@ function Inner() {
         .from('messages').select('*')
         .eq('chat_id', id).order('created_at', { ascending: true });
       if (!cancel) setMessages(msgs || []);
+
+      // Marca como lido para o lado certo
+      if (c && me) {
+        const updates = me === c.buyer_id
+          ? { last_read_buyer_at: new Date().toISOString() }
+          : me === c.seller_id
+          ? { last_read_seller_at: new Date().toISOString() }
+          : null;
+        if (updates) await supabase.from('chats').update(updates).eq('id', id);
+      }
     })();
     return () => { cancel = true; };
-  }, [id]);
+  }, [id, me]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -76,17 +88,46 @@ function Inner() {
   }
 
   const isSeller = chat && me && me === chat.seller_id;
+  const match = listing && buyerProfile ? computeMatch(listing, buyerProfile) : null;
 
   return (
     <>
       <TopBar
-        title={listing ? `${listing.marca} ${listing.modelo}` : 'Conversa'}
+        title={isSeller ? buyerAlias(chat?.buyer_id) : (listing ? `${listing.marca} ${listing.modelo}` : 'Conversa')}
         back
       />
       <div className="page-pad flex flex-col gap-3">
+        {listing && (
+          <Link
+            href={`/anuncio/${listing.id}`}
+            className="flex items-center gap-3 rounded-2xl border border-outline bg-card p-3 active:bg-elevated"
+          >
+            <div className="h-14 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-elevated">
+              {listing.foto_principal_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={listing.foto_principal_url} alt="" className="h-full w-full object-cover" />
+              )}
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-bold">{listing.marca} {listing.modelo}</p>
+              <p className="text-xs text-slate-400">{listing.ano}</p>
+              <p className="font-display text-sm font-black text-brand-500">{formatPrice(listing.preco)}</p>
+            </div>
+          </Link>
+        )}
+
         {isSeller && buyerProfile && (
           <div className="rounded-xl border border-brand-500/30 bg-brand-500/10 p-3 text-xs text-brand-100">
-            <strong className="font-display uppercase tracking-wide text-brand-500">Lead</strong>
+            <div className="flex items-center justify-between">
+              <strong className="font-display uppercase tracking-wide text-brand-500">
+                {buyerAlias(chat.buyer_id)}
+              </strong>
+              {match != null && (
+                <span className="rounded-full bg-brand-500/20 px-2 py-0.5 text-[10px] font-bold text-brand-500">
+                  {match}% match
+                </span>
+              )}
+            </div>
             <p className="mt-1 text-slate-200">
               {summarizeBuyer(buyerProfile) || 'comprador interessado'}
             </p>
@@ -94,14 +135,30 @@ function Inner() {
           </div>
         )}
 
-        <ul className="flex flex-col gap-2 pb-2">
+        <ul className="flex flex-col gap-3 pb-2">
+          {messages.length === 0 && (
+            <p className="text-center text-xs text-slate-500">
+              Nenhuma mensagem ainda. Mande a primeira!
+            </p>
+          )}
           {messages.map((m) => {
             const mine = m.sender_id === me;
+            const role = chat && m.sender_id === chat.seller_id ? 'Vendedor' : 'Comprador';
             return (
-              <li key={m.id} className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
-                mine ? 'self-end bg-brand-500 text-black' : 'self-start bg-elevated text-white'
-              }`}>
-                {m.texto}
+              <li key={m.id} className={`flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
+                <span className={`mb-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                  mine ? 'text-brand-500' : 'text-slate-500'
+                }`}>
+                  {role}
+                </span>
+                <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+                  mine ? 'bg-brand-500 text-black' : 'bg-elevated text-white'
+                }`}>
+                  {m.texto}
+                </div>
+                <span className="mt-0.5 text-[10px] text-slate-500">
+                  {new Date(m.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </span>
               </li>
             );
           })}

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Logo from '@/components/Logo';
+import PasswordInput from '@/components/PasswordInput';
 import { supabase } from '@/lib/supabase';
 
 export default function CadastroPage() {
@@ -106,12 +107,12 @@ export default function CadastroPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label" htmlFor="password">Senha</label>
-              <input id="password" type="password" required minLength={6} className="input"
+              <PasswordInput id="password" required minLength={6}
                 value={form.password} onChange={update('password')} />
             </div>
             <div>
               <label className="label" htmlFor="confirm">Confirmar</label>
-              <input id="confirm" type="password" required minLength={6} className="input"
+              <PasswordInput id="confirm" required minLength={6}
                 value={form.confirm} onChange={update('confirm')} />
             </div>
           </div>

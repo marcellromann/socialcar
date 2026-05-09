@@ -31,8 +31,35 @@ Stack: **Next.js 14 (App Router) · Tailwind · Supabase**.
 | `/chats/[id]`       | Conversa individual. 🔒                                        |
 | `/chats/novo`       | Cria/abre chat a partir de um anúncio. 🔒                      |
 | `/perfil`           | Dados e preferências do usuário. 🔒                            |
+| `/perfil/comprador/[id]` | Perfil **anônimo** do comprador — só o vendedor que recebeu interesse pode ver. 🔒 |
+| `/meus-anuncios/[id]/interessados` | Lista de interessados em um anúncio (alias + match + chat). 🔒 |
 
 🔒 = exige autenticação (redireciona para `/entrar`).
+
+## Métricas e privacidade
+
+- Cada visualização, swipe (interest/pass) e save no feed gera uma linha
+  em `listing_events`. O painel `/meus-anuncios` agrega esses eventos por
+  anúncio (views, interesses, passes, taxa de conversão e mini-gráfico de
+  interesses dos últimos 7 dias). Anúncios com 10+ interesses ganham o
+  selo **🔥 Hot**.
+- Compradores aparecem para o vendedor como `Comprador #XXXX` — alias
+  determinístico derivado do `user_id` (ver `lib/anon.js`). **Nenhum dado
+  pessoal** (nome, e-mail, telefone) trafega nas APIs públicas; o selo
+  e a tela `/perfil/comprador/[id]` mostram apenas as preferências do
+  questionário.
+- O score de compatibilidade (`computeMatch`) compara o anúncio com as
+  preferências do comprador (faixa de preço, combustível, estado).
+- O vendedor pode iniciar um chat a partir da lista de interessados; a
+  conversa exibe o card resumo do anúncio no topo, o resumo das
+  preferências do comprador, e cada mensagem é rotulada como **Vendedor**
+  ou **Comprador** (sem nomes reais).
+- A aba **Chats** do BottomNav mostra um badge com o número de mensagens
+  não lidas. As marcações de leitura ficam em `chats.last_read_buyer_at`
+  e `chats.last_read_seller_at`.
+- RLS no banco garante que vendedor só vê interessados e perfis dos
+  compradores que demonstraram interesse nos anúncios dele
+  (ver políticas em `supabase/schema.sql`).
 
 ---
 

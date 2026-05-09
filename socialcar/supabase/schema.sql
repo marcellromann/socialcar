@@ -6,6 +6,20 @@
 create extension if not exists "pgcrypto";
 
 -- ----------------------------------------------------------------------------
+-- Helper: id do app-user a partir do auth.uid() (Supabase Auth → public.users)
+-- ----------------------------------------------------------------------------
+create or replace function public.current_user_id() returns uuid
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select id from public.users where auth_id = auth.uid() limit 1;
+$$;
+revoke all on function public.current_user_id() from public;
+grant execute on function public.current_user_id() to anon, authenticated;
+
+-- ----------------------------------------------------------------------------
 -- USERS (perfil público + tipo)
 -- ----------------------------------------------------------------------------
 do $$ begin
@@ -116,6 +130,11 @@ create table if not exists public.chats (
 create index if not exists chats_buyer_idx  on public.chats (buyer_id);
 create index if not exists chats_seller_idx on public.chats (seller_id);
 
+-- Marcação de leitura por lado (para badge de não lidas no /chats)
+alter table public.chats
+  add column if not exists last_read_buyer_at  timestamptz default '-infinity',
+  add column if not exists last_read_seller_at timestamptz default '-infinity';
+
 create table if not exists public.messages (
   id          uuid primary key default gen_random_uuid(),
   chat_id     uuid not null references public.chats(id) on delete cascade,
@@ -125,6 +144,41 @@ create table if not exists public.messages (
 );
 
 create index if not exists messages_chat_created_idx on public.messages (chat_id, created_at);
+
+-- ----------------------------------------------------------------------------
+-- LISTING_EVENTS (telemetria de view/interest/pass/save no feed)
+-- ----------------------------------------------------------------------------
+do $$ begin
+  create type listing_event_kind as enum ('view', 'interest', 'pass', 'save');
+exception when duplicate_object then null; end $$;
+
+create table if not exists public.listing_events (
+  id          uuid primary key default gen_random_uuid(),
+  listing_id  uuid not null references public.listings(id) on delete cascade,
+  user_id     uuid references public.users(id) on delete set null,
+  tipo        listing_event_kind not null,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists listing_events_listing_tipo_idx
+  on public.listing_events (listing_id, tipo, created_at desc);
+create index if not exists listing_events_user_idx
+  on public.listing_events (user_id, created_at desc);
+
+alter table public.listing_events enable row level security;
+
+drop policy if exists "listing_events_insert_anyone" on public.listing_events;
+create policy "listing_events_insert_anyone"
+  on public.listing_events for insert with check (true);
+
+drop policy if exists "listing_events_select_owner" on public.listing_events;
+create policy "listing_events_select_owner"
+  on public.listing_events for select
+  using (
+    listing_id in (
+      select id from public.listings where user_id = public.current_user_id()
+    )
+  );
 
 -- ----------------------------------------------------------------------------
 -- VIEW pública de anúncios (NUNCA expõe placa)
@@ -202,6 +256,7 @@ alter table public.listing_photos  enable row level security;
 alter table public.interests       enable row level security;
 alter table public.chats           enable row level security;
 alter table public.messages        enable row level security;
+alter table public.listing_events  enable row level security;
 
 -- USERS: dono lê e atualiza, qualquer um insere o próprio registro
 drop policy if exists "users_self_read"   on public.users;
@@ -211,9 +266,34 @@ create policy "users_self_read"   on public.users for select using (true);
 create policy "users_open_insert" on public.users for insert with check (true);
 create policy "users_self_write"  on public.users for update using (true);
 
--- BUYER PROFILES: dono lê e escreve
-drop policy if exists "buyer_profiles_rw" on public.buyer_profiles;
-create policy "buyer_profiles_rw" on public.buyer_profiles for all using (true) with check (true);
+-- BUYER PROFILES:
+--   - dono lê/escreve o próprio perfil
+--   - vendedor lê o perfil de quem deu interesse em algum dos anúncios dele
+drop policy if exists "buyer_profiles_rw"            on public.buyer_profiles;
+drop policy if exists "buyer_profiles_select"        on public.buyer_profiles;
+drop policy if exists "buyer_profiles_insert_self"   on public.buyer_profiles;
+drop policy if exists "buyer_profiles_update_self"   on public.buyer_profiles;
+
+create policy "buyer_profiles_select"
+  on public.buyer_profiles for select
+  using (
+    user_id = public.current_user_id()
+    or user_id in (
+      select i.buyer_id
+      from public.interests i
+      join public.listings l on l.id = i.listing_id
+      where l.user_id = public.current_user_id()
+    )
+  );
+
+create policy "buyer_profiles_insert_self"
+  on public.buyer_profiles for insert
+  with check (user_id = public.current_user_id());
+
+create policy "buyer_profiles_update_self"
+  on public.buyer_profiles for update
+  using (user_id = public.current_user_id())
+  with check (user_id = public.current_user_id());
 
 -- LISTINGS: leitura pública (placa nunca aparece na view), escrita liberada na v1
 drop policy if exists "listings_select_public" on public.listings;
@@ -227,15 +307,56 @@ create policy "listings_update_public" on public.listings for update using (true
 drop policy if exists "listing_photos_rw" on public.listing_photos;
 create policy "listing_photos_rw" on public.listing_photos for all using (true) with check (true);
 
--- INTERESTS: dono cria/lê
-drop policy if exists "interests_rw" on public.interests;
-create policy "interests_rw" on public.interests for all using (true) with check (true);
+-- INTERESTS:
+--   - comprador insere e lê os próprios interesses
+--   - vendedor lê interesses dos próprios anúncios
+drop policy if exists "interests_rw"                  on public.interests;
+drop policy if exists "interests_select_self_or_seller" on public.interests;
+drop policy if exists "interests_insert_self"         on public.interests;
+create policy "interests_select_self_or_seller"
+  on public.interests for select
+  using (
+    buyer_id = public.current_user_id()
+    or listing_id in (
+      select id from public.listings where user_id = public.current_user_id()
+    )
+  );
+create policy "interests_insert_self"
+  on public.interests for insert
+  with check (buyer_id = public.current_user_id());
 
--- CHATS / MESSAGES: participantes leem e escrevem (v1 simplificada)
-drop policy if exists "chats_rw" on public.chats;
-drop policy if exists "messages_rw" on public.messages;
-create policy "chats_rw"    on public.chats    for all using (true) with check (true);
-create policy "messages_rw" on public.messages for all using (true) with check (true);
+-- CHATS / MESSAGES: participantes leem e escrevem
+drop policy if exists "chats_rw"        on public.chats;
+drop policy if exists "chats_select"    on public.chats;
+drop policy if exists "chats_insert"    on public.chats;
+drop policy if exists "chats_update"    on public.chats;
+drop policy if exists "messages_rw"     on public.messages;
+drop policy if exists "messages_select" on public.messages;
+drop policy if exists "messages_insert" on public.messages;
+
+create policy "chats_select" on public.chats for select using (
+  buyer_id = public.current_user_id() or seller_id = public.current_user_id()
+);
+create policy "chats_insert" on public.chats for insert with check (
+  buyer_id = public.current_user_id() or seller_id = public.current_user_id()
+);
+create policy "chats_update" on public.chats for update using (
+  buyer_id = public.current_user_id() or seller_id = public.current_user_id()
+);
+
+create policy "messages_select" on public.messages for select using (
+  chat_id in (
+    select id from public.chats
+    where buyer_id = public.current_user_id() or seller_id = public.current_user_id()
+  )
+);
+create policy "messages_insert" on public.messages for insert with check (
+  sender_id = public.current_user_id()
+  and chat_id in (
+    select id from public.chats
+    where buyer_id = public.current_user_id() or seller_id = public.current_user_id()
+  )
+);
 
 -- ============================================================================
 -- STORAGE: bucket público para fotos
