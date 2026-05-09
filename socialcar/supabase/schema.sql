@@ -87,6 +87,13 @@ create index if not exists listings_status_idx     on public.listings (status);
 create index if not exists listings_created_at_idx on public.listings (created_at desc);
 create index if not exists listings_user_id_idx    on public.listings (user_id);
 
+-- Mantém a check de combustivel sincronizada em tabelas já existentes.
+do $$ begin
+  alter table public.listings drop constraint if exists listings_combustivel_check;
+  alter table public.listings add constraint listings_combustivel_check
+    check (combustivel in ('gasolina','etanol','flex','diesel','eletrico','hibrido'));
+end $$;
+
 -- ----------------------------------------------------------------------------
 -- LISTING_PHOTOS (galeria de fotos de cada anúncio)
 -- Limite por anúncio: mínimo 3, máximo 15 (validado no frontend).

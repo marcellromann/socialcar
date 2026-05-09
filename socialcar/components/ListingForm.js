@@ -154,11 +154,12 @@ export default function ListingForm() {
       try {
         const brands = await fetchFipeBrands();
         if (cancelled) return;
+        const sorted = [...brands].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
         setFipe((s) => ({
           ...s,
-          brands,
+          brands: sorted,
           loading: { ...s.loading, brands: false },
-          fallback: { ...s.fallback, brands: brands.length === 0 },
+          fallback: { ...s.fallback, brands: sorted.length === 0 },
         }));
       } catch {
         if (cancelled) return;
@@ -200,11 +201,12 @@ export default function ListingForm() {
     if (!marcaId) return;
     try {
       const models = await fetchFipeModels(marcaId);
+      const sorted = [...models].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
       setFipe((s) => ({
         ...s,
-        models,
+        models: sorted,
         loading: { ...s.loading, models: false },
-        fallback: { ...s.fallback, models: models.length === 0 },
+        fallback: { ...s.fallback, models: sorted.length === 0 },
       }));
     } catch {
       setFipe((s) => ({
@@ -330,7 +332,8 @@ export default function ListingForm() {
     !!form.marca.trim() &&
     !!form.modelo.trim() &&
     !!form.motorizacao.trim() &&
-    !!form.ano;
+    !!form.ano &&
+    !!form.combustivel;
   const canAdvanceFromStep3 =
     !!form.preco &&
     !!form.km &&
@@ -343,7 +346,7 @@ export default function ListingForm() {
     setError(null);
     if (step === 2) {
       if (!canAdvanceFromStep2) {
-        setError('Preencha marca, modelo, motorização e ano para continuar.');
+        setError('Preencha marca, modelo, motorização, ano e combustível.');
         return;
       }
     }
@@ -521,7 +524,17 @@ export default function ListingForm() {
             {plateState.status === 'checking' ? 'Verificando…' : 'Continuar'}
           </button>
         )}
-        {(step === 2 || step === 3) && (
+        {step === 2 && (
+          <button
+            type="button"
+            onClick={goNext}
+            className="btn-primary flex-1"
+            disabled={!canAdvanceFromStep2}
+          >
+            Avançar para detalhes
+          </button>
+        )}
+        {step === 3 && (
           <button type="button" onClick={goNext} className="btn-primary flex-1">
             Continuar
           </button>
@@ -617,163 +630,148 @@ function Step1Plate({ placa, onChange, formatErro, plateState, canAdvance, onAdv
 
 // ─── Step 2 ──────────────────────────────────────────────────────────────────
 function Step2Identify({ fipe, form, update, onSelectBrand, onSelectModel, onSelectYear }) {
-  const useFreeBrand = fipe.fallback.brands;
-  const useFreeModel = fipe.fallback.models || useFreeBrand;
-  const useFreeYear = fipe.fallback.years || useFreeModel;
+  const showFreeBrand = fipe.fallback.brands;
+  const showFreeModel = fipe.fallback.models || showFreeBrand;
+  const showFreeYear = fipe.fallback.years || showFreeModel;
+  const marcaSelected = !!fipe.marcaId || !!form.marca.trim();
+  const modeloSelected = !!fipe.modeloId || !!form.modelo.trim();
 
   return (
-    <section className="card space-y-4 p-4">
+    <section className="card space-y-5 p-4">
       <header>
-        <h2 className="display text-base text-white">Identificar o veículo</h2>
-        <p className="text-xs text-slate-400">Selecione os dados do seu veículo abaixo.</p>
+        <h2 className="display text-lg text-white">Dados do veículo</h2>
+        <p className="text-xs text-slate-400">Preencha as informações do seu carro.</p>
       </header>
-
-      {(useFreeBrand || fipe.fallback.models || fipe.fallback.years) && (
-        <p className="rounded-xl border border-yellow-500/40 bg-yellow-500/10 p-3 text-xs text-yellow-200">
-          Algum dado não pôde ser carregado da FIPE. Preencha em texto livre nos campos
-          abaixo — funciona normalmente.
-        </p>
-      )}
 
       {/* Marca */}
       <div>
-        <label className="label">
-          Marca {fipe.loading.brands && <Hint>carregando…</Hint>}
-        </label>
-        {useFreeBrand ? (
+        <label className="label">Marca</label>
+        {showFreeBrand ? (
           <input
             className="input"
             value={form.marca}
             onChange={update('marca')}
-            placeholder="Ex.: Volkswagen"
-            required
-          />
-        ) : (
-          <SearchableSelect
-            listId="fipe-marcas"
-            disabled={fipe.loading.brands}
-            value={fipe.marcaId}
-            text={form.marca}
-            options={fipe.brands}
-            onChange={(code, nome) => {
-              if (code) {
-                onSelectBrand(code);
-              } else {
-                // texto não bate com nenhuma opção FIPE — guarda só o que digitou
-                update('marca')({ target: { value: nome } });
-              }
-            }}
-            placeholder={fipe.loading.brands ? 'Carregando marcas…' : 'Digite ou selecione'}
-          />
-        )}
-      </div>
-
-      {/* Modelo */}
-      <div>
-        <label className="label">
-          Modelo {fipe.loading.models && <Hint>carregando…</Hint>}
-        </label>
-        {useFreeModel ? (
-          <input
-            className="input"
-            value={form.modelo}
-            onChange={update('modelo')}
-            placeholder="Ex.: Polo, Corolla, Civic"
-            required
-          />
-        ) : (
-          <SearchableSelect
-            listId="fipe-modelos"
-            disabled={!fipe.marcaId || fipe.loading.models}
-            value={fipe.modeloId}
-            text={form.modelo}
-            options={fipe.models}
-            onChange={(code, nome) => {
-              if (code) onSelectModel(code);
-              else update('modelo')({ target: { value: nome } });
-            }}
-            placeholder={
-              !fipe.marcaId
-                ? 'Escolha a marca primeiro'
-                : fipe.loading.models
-                ? 'Carregando modelos…'
-                : 'Digite ou selecione'
-            }
-          />
-        )}
-      </div>
-
-      {/* Ano */}
-      <div>
-        <label className="label">
-          Ano {fipe.loading.years && <Hint>carregando…</Hint>}
-        </label>
-        {useFreeYear ? (
-          <input
-            className="input"
-            type="number"
-            min="1900"
-            max="2100"
-            value={form.ano}
-            onChange={update('ano')}
-            placeholder="Ex.: 2022"
+            placeholder="Ex: Volkswagen"
             required
           />
         ) : (
           <select
             className="input"
-            value={fipe.anoId}
-            onChange={(e) => onSelectYear(e.target.value)}
-            disabled={!fipe.modeloId || fipe.loading.years}
+            value={fipe.marcaId}
+            onChange={(e) => onSelectBrand(e.target.value)}
+            disabled={fipe.loading.brands}
             required
           >
-            <option value="">
-              {!fipe.modeloId
-                ? 'Escolha o modelo primeiro'
-                : fipe.loading.years
-                ? 'Carregando anos…'
-                : 'Selecione o ano'}
-            </option>
-            {fipe.years.map((y) => (
-              <option key={y.codigo} value={y.codigo}>
-                {y.nome}
+            <option value="">{fipe.loading.brands ? 'Carregando…' : 'Selecione a marca'}</option>
+            {fipe.brands.map((b) => (
+              <option key={b.codigo} value={b.codigo}>
+                {b.nome}
               </option>
             ))}
           </select>
         )}
       </div>
 
-      {/* Motorização (sempre texto livre, obrigatório) */}
+      {/* Modelo — só aparece após escolher a marca */}
+      {marcaSelected && (
+        <div>
+          <label className="label">Modelo</label>
+          {showFreeModel ? (
+            <input
+              className="input"
+              value={form.modelo}
+              onChange={update('modelo')}
+              placeholder="Ex: Polo"
+              required
+            />
+          ) : (
+            <select
+              className="input"
+              value={fipe.modeloId}
+              onChange={(e) => onSelectModel(e.target.value)}
+              disabled={fipe.loading.models}
+              required
+            >
+              <option value="">{fipe.loading.models ? 'Carregando…' : 'Selecione o modelo'}</option>
+              {fipe.models.map((m) => (
+                <option key={m.codigo} value={m.codigo}>
+                  {m.nome}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+
+      {/* Ano — só aparece após escolher o modelo */}
+      {modeloSelected && (
+        <div>
+          <label className="label">Ano</label>
+          {showFreeYear ? (
+            <input
+              className="input"
+              type="number"
+              min="1900"
+              max="2100"
+              value={form.ano}
+              onChange={update('ano')}
+              placeholder="Ex: 2023"
+              required
+            />
+          ) : (
+            <select
+              className="input"
+              value={fipe.anoId}
+              onChange={(e) => onSelectYear(e.target.value)}
+              disabled={fipe.loading.years}
+              required
+            >
+              <option value="">{fipe.loading.years ? 'Carregando…' : 'Selecione o ano'}</option>
+              {fipe.years.map((y) => (
+                <option key={y.codigo} value={y.codigo}>
+                  {y.nome}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+
+      {/* Motorização */}
       <div>
         <label className="label">Motorização</label>
         <input
           className="input"
           value={form.motorizacao}
           onChange={update('motorizacao')}
-          placeholder="Ex.: 1.0 TSI, 2.0 Flex, 1.6 16V"
+          placeholder="Ex: 1.0 TSI, 2.0 Flex, 1.6 16V"
           required
         />
       </div>
 
-      {/* Versão (opcional) */}
+      {/* Versão */}
       <div>
-        <label className="label">Versão / trim (opcional)</label>
+        <label className="label">Versão</label>
         <input
           className="input"
           value={form.versao}
           onChange={update('versao')}
-          placeholder="Ex.: Highline, XEi, EX"
+          placeholder="Ex: Highline, XEi, Comfort (opcional)"
         />
       </div>
 
-      {/* Combustível — vem da FIPE quando possível, mas pode ser editado */}
+      {/* Combustível */}
       <div>
         <label className="label">Combustível</label>
-        <select className="input" value={form.combustivel} onChange={update('combustivel')}>
-          <option value="">—</option>
+        <select
+          className="input"
+          value={form.combustivel}
+          onChange={update('combustivel')}
+          required
+        >
+          <option value="">Selecione</option>
           <option value="flex">Flex</option>
           <option value="gasolina">Gasolina</option>
-          <option value="etanol">Etanol</option>
           <option value="diesel">Diesel</option>
           <option value="eletrico">Elétrico</option>
           <option value="hibrido">Híbrido</option>
@@ -793,9 +791,7 @@ function Step2Identify({ fipe, form, update, onSelectBrand, onSelectModel, onSel
           </p>
           <p className="display text-2xl text-white">{formatBRL(form.valorFipe)}</p>
           <p className="mt-1 text-[11px] text-slate-300">
-            {form.marca} {form.modelo}
-            {form.motorizacao ? ` ${form.motorizacao}` : ''} • {form.ano}
-            {form.combustivel ? ` • ${form.combustivel}` : ''}
+            {form.marca} {form.modelo} • {form.ano}
             {form.codigoFipe ? ` • FIPE ${form.codigoFipe}` : ''}
           </p>
         </div>
@@ -804,59 +800,12 @@ function Step2Identify({ fipe, form, update, onSelectBrand, onSelectModel, onSel
   );
 }
 
-function Hint({ children }) {
-  return <span className="ml-2 text-[10px] font-normal normal-case tracking-normal text-slate-400">{children}</span>;
-}
-
 function Spinner() {
   return (
     <span
       aria-hidden
       className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-brand-500 border-t-transparent"
     />
-  );
-}
-
-/**
- * Combobox simples baseado em <input list> + <datalist>.
- * - `value` é o código (id) atualmente selecionado.
- * - `text` é o que aparece no input (sincronizado com a opção do `value`).
- * - `onChange(code, nome)` recebe o código quando o texto digitado bate com
- *   uma opção, ou string vazia + o texto puro caso contrário.
- */
-function SearchableSelect({ listId, value, text, options, onChange, placeholder, disabled }) {
-  const [draft, setDraft] = useState(text || '');
-
-  useEffect(() => {
-    setDraft(text || '');
-  }, [text, value]);
-
-  function handleChange(e) {
-    const v = e.target.value;
-    setDraft(v);
-    const match = options.find(
-      (o) => String(o.nome).toLowerCase() === v.trim().toLowerCase()
-    );
-    onChange(match ? String(match.codigo) : '', v);
-  }
-
-  return (
-    <>
-      <input
-        list={listId}
-        className="input"
-        value={draft}
-        onChange={handleChange}
-        placeholder={placeholder}
-        disabled={disabled}
-        autoComplete="off"
-      />
-      <datalist id={listId}>
-        {options.map((o) => (
-          <option key={o.codigo} value={o.nome} />
-        ))}
-      </datalist>
-    </>
   );
 }
 
