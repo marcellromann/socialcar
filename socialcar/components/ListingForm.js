@@ -11,6 +11,8 @@ import {
   fetchFipeDetail,
   parseFipeValor,
   mapFipeFuel,
+  lookupPlate,
+  parseFipeModelName,
 } from '@/lib/fipe';
 import { useAuth } from '@/lib/auth';
 
@@ -39,6 +41,7 @@ const initialForm = {
   placa: '',
   marca: '',
   modelo: '',
+  motorizacao: '',
   ano: '',
   versao: '',
   preco: '',
@@ -92,6 +95,8 @@ export default function ListingForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [plateState, setPlateState] = useState({ status: 'idle', message: '' });
+  // 'idle' antes do step 2; 'consulting' enquanto faz lookup; 'auto' se identificou; 'manual' caso contrário.
+  const [step2Mode, setStep2Mode] = useState('idle');
 
   const previews = useMemo(
     () => files.map((f) => ({ name: f.name, url: URL.createObjectURL(f) })),
@@ -141,14 +146,47 @@ export default function ListingForm() {
     }
   }
 
-  // ─── Step 2: cascade FIPE ──────────────────────────────────────────────────
+  // ─── Step 2: tenta auto-identificar pela placa, senão cai no manual ────────
   useEffect(() => {
-    if (step !== 2 || fipe.brands.length || fipe.loading.brands) return;
+    if (step !== 2 || step2Mode !== 'idle') return;
+    let cancelled = false;
+    setStep2Mode('consulting');
+    (async () => {
+      const data = await lookupPlate(placaNorm, { timeoutMs: 5000 });
+      if (cancelled) return;
+      if (data && data.marca && data.modelo) {
+        const parsed = parseFipeModelName(data.modelo);
+        const valor = typeof data.valorFipe === 'number' ? data.valorFipe : null;
+        setForm((f) => ({
+          ...f,
+          marca: data.marca,
+          modelo: parsed.nomePrincipal || data.modelo,
+          motorizacao: parsed.motorizacao || '',
+          versao: parsed.versao || data.versao || '',
+          ano: data.ano ? String(data.ano) : f.ano,
+          combustivel: mapFipeFuel(data.combustivel) || f.combustivel,
+          valorFipe: valor,
+          preco: f.preco || (valor ? String(valor) : ''),
+        }));
+        setStep2Mode('auto');
+      } else {
+        setStep2Mode('manual');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [step, step2Mode, placaNorm]);
+
+  // Carrega marcas FIPE para o fluxo manual (sob demanda).
+  useEffect(() => {
+    if (step !== 2 || step2Mode !== 'manual') return;
+    if (fipe.brands.length || fipe.loading.brands) return;
     setFipe((s) => ({ ...s, loading: { ...s.loading, brands: true } }));
     fetchFipeBrands().then((brands) =>
       setFipe((s) => ({ ...s, brands, loading: { ...s.loading, brands: false } }))
     );
-  }, [step, fipe.brands.length, fipe.loading.brands]);
+  }, [step, step2Mode, fipe.brands.length, fipe.loading.brands]);
 
   async function onSelectBrand(marcaId) {
     const marca = fipe.brands.find((b) => String(b.codigo) === String(marcaId));
@@ -185,11 +223,13 @@ export default function ListingForm() {
       anoId: '',
       loading: { ...s.loading, years: true },
     }));
+    const parsed = parseFipeModelName(modelo?.nome || '');
     setForm((f) => ({
       ...f,
-      modelo: modelo?.nome || '',
+      modelo: parsed.nomePrincipal || modelo?.nome || '',
+      motorizacao: parsed.motorizacao || f.motorizacao || '',
+      versao: parsed.versao || '',
       ano: '',
-      versao: modelo?.nome || '',
       combustivel: '',
       codigoFipe: '',
       valorFipe: null,
@@ -273,7 +313,12 @@ export default function ListingForm() {
   }
 
   // ─── Navegação entre steps ─────────────────────────────────────────────────
-  const canAdvanceFromStep2 = !!form.marca && !!form.modelo && !!form.ano;
+  const canAdvanceFromStep2 =
+    !!form.marca.trim() &&
+    !!form.modelo.trim() &&
+    !!form.motorizacao.trim() &&
+    !!form.ano &&
+    !!form.combustivel;
   const canAdvanceFromStep3 =
     !!form.preco &&
     !!form.km &&
@@ -286,7 +331,7 @@ export default function ListingForm() {
     setError(null);
     if (step === 2) {
       if (!canAdvanceFromStep2) {
-        setError('Selecione marca, modelo e ano para continuar.');
+        setError('Preencha marca, modelo, motorização, ano e combustível.');
         return;
       }
     }
@@ -302,7 +347,12 @@ export default function ListingForm() {
 
   function goBack() {
     setError(null);
-    setStep((s) => Math.max(1, s - 1));
+    setStep((s) => {
+      const next = Math.max(1, s - 1);
+      // Voltar do step 2 para o 1 destrava nova consulta caso o usuário troque a placa.
+      if (s === 2 && next === 1) setStep2Mode('idle');
+      return next;
+    });
   }
 
   // ─── Submissão final ───────────────────────────────────────────────────────
@@ -319,13 +369,18 @@ export default function ListingForm() {
       const photoUrls = await uploadPhotos(draftId);
       const main = photoUrls[mainIdx] || photoUrls[0];
 
+      // O schema atual não tem coluna dedicada para "motorização": juntamos com a versão.
+      const versaoCombinada = [form.motorizacao.trim(), form.versao.trim()]
+        .filter(Boolean)
+        .join(' ') || null;
+
       const { data: rpcId, error: rpcErr } = await supabase.rpc('create_listing_safe', {
         p_user_id: appUser.id,
         p_placa_hash: placa_hash,
         p_marca: form.marca.trim(),
         p_modelo: form.modelo.trim(),
         p_ano: Number(form.ano),
-        p_versao: form.versao.trim() || null,
+        p_versao: versaoCombinada,
         p_km: Number(form.km),
         p_preco: Number(form.preco),
         p_combustivel: form.combustivel || null,
@@ -351,7 +406,7 @@ export default function ListingForm() {
             marca: form.marca.trim(),
             modelo: form.modelo.trim(),
             ano: Number(form.ano),
-            versao: form.versao.trim() || null,
+            versao: versaoCombinada,
             km: Number(form.km),
             preco: Number(form.preco),
             combustivel: form.combustivel || null,
@@ -413,11 +468,14 @@ export default function ListingForm() {
 
       {step === 2 && (
         <Step2Identify
+          mode={step2Mode}
           fipe={fipe}
           form={form}
+          update={update}
           onSelectBrand={onSelectBrand}
           onSelectModel={onSelectModel}
           onSelectYear={onSelectYear}
+          onSwitchToManual={() => setStep2Mode('manual')}
         />
       )}
 
@@ -553,25 +611,142 @@ function Step1Plate({ placa, onChange, formatErro, plateState, canAdvance, onAdv
 }
 
 // ─── Step 2 ──────────────────────────────────────────────────────────────────
-function Step2Identify({ fipe, form, onSelectBrand, onSelectModel, onSelectYear }) {
+function Step2Identify({
+  mode,
+  fipe,
+  form,
+  update,
+  onSelectBrand,
+  onSelectModel,
+  onSelectYear,
+  onSwitchToManual,
+}) {
   return (
     <section className="card space-y-4 p-4">
       <header>
         <h2 className="display text-base text-white">Identificar o veículo</h2>
-        <p className="text-xs text-slate-400">
-          Escolha marca, modelo e ano para puxar o valor de referência FIPE.
-        </p>
       </header>
 
+      <Step2Status mode={mode} />
+
+      {mode === 'consulting' && (
+        <p className="text-xs text-slate-400">
+          Tentando identificar pelo número da placa. Isso leva no máximo 5 segundos.
+        </p>
+      )}
+
+      {mode === 'manual' && (
+        <p className="rounded-xl border border-yellow-500/40 bg-yellow-500/10 p-3 text-xs text-yellow-200">
+          Não conseguimos identificar seu veículo pela placa. Preencha os dados abaixo.
+        </p>
+      )}
+
+      {mode === 'auto' && (
+        <p className="rounded-xl border border-brand-500/40 bg-brand-500/10 p-3 text-xs text-brand-100">
+          ✓ Veículo identificado automaticamente. Confira e ajuste se necessário.
+        </p>
+      )}
+
+      {mode === 'manual' && (
+        <ManualCascade
+          fipe={fipe}
+          onSelectBrand={onSelectBrand}
+          onSelectModel={onSelectModel}
+          onSelectYear={onSelectYear}
+        />
+      )}
+
+      {(mode === 'auto' || mode === 'manual') && (
+        <VehicleFields form={form} update={update} mode={mode} />
+      )}
+
+      {fipe.loading.detail && (
+        <p className="text-xs text-slate-400">Buscando preço FIPE…</p>
+      )}
+
+      {form.valorFipe != null && (
+        <div className="rounded-xl border border-brand-500/40 bg-brand-500/10 p-3">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-brand-500">
+            Valor de referência FIPE
+          </p>
+          <p className="display text-2xl text-white">{formatBRL(form.valorFipe)}</p>
+          <p className="mt-1 text-[11px] text-slate-300">
+            {form.marca} {form.modelo}
+            {form.motorizacao ? ` ${form.motorizacao}` : ''} • {form.ano}
+            {form.combustivel ? ` • ${form.combustivel}` : ''}
+            {form.codigoFipe ? ` • FIPE ${form.codigoFipe}` : ''}
+          </p>
+        </div>
+      )}
+
+      {mode === 'auto' && (
+        <button
+          type="button"
+          onClick={onSwitchToManual}
+          className="text-[11px] font-bold uppercase tracking-wide text-slate-400 underline"
+        >
+          Não é meu veículo — preencher manualmente
+        </button>
+      )}
+    </section>
+  );
+}
+
+function Step2Status({ mode }) {
+  if (mode === 'consulting') {
+    return (
+      <div className="flex items-center gap-3 rounded-xl border border-outline bg-page p-3">
+        <Spinner />
+        <p className="text-sm text-slate-200">Consultando dados do veículo…</p>
+      </div>
+    );
+  }
+  if (mode === 'auto') {
+    return (
+      <div className="flex items-center gap-3 rounded-xl border border-brand-500/40 bg-brand-500/10 p-3">
+        <span className="grid h-7 w-7 place-items-center rounded-full bg-brand-500 text-xs font-bold text-black">
+          ✓
+        </span>
+        <p className="text-sm font-bold text-brand-100">Veículo identificado automaticamente</p>
+      </div>
+    );
+  }
+  if (mode === 'manual') {
+    return (
+      <div className="flex items-center gap-3 rounded-xl border border-yellow-500/40 bg-yellow-500/10 p-3">
+        <span className="grid h-7 w-7 place-items-center rounded-full bg-yellow-500 text-xs font-bold text-black">
+          ⚠
+        </span>
+        <p className="text-sm font-bold text-yellow-100">Preenchimento manual</p>
+      </div>
+    );
+  }
+  return null;
+}
+
+function Spinner() {
+  return (
+    <span
+      aria-hidden
+      className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-brand-500 border-t-transparent"
+    />
+  );
+}
+
+function ManualCascade({ fipe, onSelectBrand, onSelectModel, onSelectYear }) {
+  return (
+    <div className="space-y-3">
       <div>
-        <label className="label">Marca</label>
+        <label className="label">Marca (FIPE)</label>
         <select
           className="input"
           value={fipe.marcaId}
           onChange={(e) => onSelectBrand(e.target.value)}
           disabled={fipe.loading.brands}
         >
-          <option value="">{fipe.loading.brands ? 'Carregando marcas…' : 'Selecione a marca'}</option>
+          <option value="">
+            {fipe.loading.brands ? 'Carregando marcas…' : 'Selecione a marca'}
+          </option>
           {fipe.brands.map((b) => (
             <option key={b.codigo} value={b.codigo}>
               {b.nome}
@@ -581,7 +756,7 @@ function Step2Identify({ fipe, form, onSelectBrand, onSelectModel, onSelectYear 
       </div>
 
       <div>
-        <label className="label">Modelo</label>
+        <label className="label">Modelo (FIPE)</label>
         <select
           className="input"
           value={fipe.modeloId}
@@ -604,7 +779,7 @@ function Step2Identify({ fipe, form, onSelectBrand, onSelectModel, onSelectYear 
       </div>
 
       <div>
-        <label className="label">Ano</label>
+        <label className="label">Ano (FIPE)</label>
         <select
           className="input"
           value={fipe.anoId}
@@ -625,25 +800,71 @@ function Step2Identify({ fipe, form, onSelectBrand, onSelectModel, onSelectYear 
           ))}
         </select>
       </div>
+    </div>
+  );
+}
 
-      {fipe.loading.detail && (
-        <p className="text-xs text-slate-400">Buscando preço FIPE…</p>
-      )}
-
-      {form.valorFipe != null && (
-        <div className="rounded-xl border border-brand-500/40 bg-brand-500/10 p-3">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-brand-500">
-            Valor de referência FIPE
-          </p>
-          <p className="display text-2xl text-white">{formatBRL(form.valorFipe)}</p>
-          <p className="mt-1 text-[11px] text-slate-300">
-            {form.marca} {form.modelo} • {form.ano}
-            {form.combustivel ? ` • ${form.combustivel}` : ''}
-            {form.codigoFipe ? ` • FIPE ${form.codigoFipe}` : ''}
-          </p>
-        </div>
-      )}
-    </section>
+function VehicleFields({ form, update }) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <div className="col-span-2">
+        <label className="label">Marca</label>
+        <input className="input" value={form.marca} onChange={update('marca')} required />
+      </div>
+      <div className="col-span-2">
+        <label className="label">Nome principal do veículo</label>
+        <input
+          className="input"
+          value={form.modelo}
+          onChange={update('modelo')}
+          placeholder="Ex.: Polo, Corolla, Civic"
+          required
+        />
+      </div>
+      <div className="col-span-2">
+        <label className="label">Motorização</label>
+        <input
+          className="input"
+          value={form.motorizacao}
+          onChange={update('motorizacao')}
+          placeholder="Ex.: 1.0 TSI, 2.0 Flex, 1.6 16V"
+          required
+        />
+      </div>
+      <div>
+        <label className="label">Ano</label>
+        <input
+          className="input"
+          type="number"
+          min="1900"
+          max="2100"
+          value={form.ano}
+          onChange={update('ano')}
+          required
+        />
+      </div>
+      <div>
+        <label className="label">Combustível</label>
+        <select className="input" value={form.combustivel} onChange={update('combustivel')} required>
+          <option value="">—</option>
+          <option value="flex">Flex</option>
+          <option value="gasolina">Gasolina</option>
+          <option value="etanol">Etanol</option>
+          <option value="diesel">Diesel</option>
+          <option value="eletrico">Elétrico</option>
+          <option value="hibrido">Híbrido</option>
+        </select>
+      </div>
+      <div className="col-span-2">
+        <label className="label">Versão / trim (opcional)</label>
+        <input
+          className="input"
+          value={form.versao}
+          onChange={update('versao')}
+          placeholder="Ex.: Highline, XEi, EX"
+        />
+      </div>
+    </div>
   );
 }
 
@@ -836,6 +1057,8 @@ function Step4Review({ form, previews, mainIdx }) {
       <dl className="grid grid-cols-2 gap-y-2 text-sm">
         <ReviewItem label="Marca" value={form.marca} />
         <ReviewItem label="Modelo" value={form.modelo} />
+        <ReviewItem label="Motorização" value={form.motorizacao} />
+        <ReviewItem label="Versão" value={form.versao} />
         <ReviewItem label="Ano" value={form.ano} />
         <ReviewItem label="Combustível" value={form.combustivel} />
         <ReviewItem label="Câmbio" value={form.cambio} />

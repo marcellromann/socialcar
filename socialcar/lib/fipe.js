@@ -17,6 +17,70 @@ async function fetchJson(url, init = {}) {
   return res.json();
 }
 
+/**
+ * Tenta identificar o veículo a partir da placa via BrasilAPI /vehicles.
+ * Não há API pública gratuita confiável para lookup por placa no Brasil — esta
+ * tentativa é best-effort e na maioria dos casos retorna null, levando o
+ * formulário ao fluxo manual.
+ *
+ * @param {string} placa  Placa normalizada (sem hífen).
+ * @param {{ timeoutMs?: number }} [opts]
+ * @returns {Promise<{marca,modelo,ano,versao,combustivel?,valorFipe?:number} | null>}
+ */
+export async function lookupPlate(placa, { timeoutMs = 5000 } = {}) {
+  if (!placa) return null;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(
+      `${BRASILAPI}/vehicles/v1/${encodeURIComponent(placa)}`,
+      { cache: 'no-store', signal: ctrl.signal }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || (!data.marca && !data.modelo)) return null;
+    return {
+      marca: data.marca || '',
+      modelo: data.modelo || '',
+      ano: data.anoModelo || data.ano || data.anoFabricacao || '',
+      versao: data.versao || '',
+      combustivel: data.combustivel || data.tipoCombustivel || '',
+      valorFipe: data.valor ?? data.fipe?.valor ?? null,
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Quebra um nome de modelo FIPE ("POLO MPI 1.0 Flex 12V 5p") em peças:
+ * { nomePrincipal: "POLO", motorizacao: "1.0 Flex", versao: "MPI 12V 5p" }.
+ * Heurística — usuário pode ajustar.
+ */
+export function parseFipeModelName(fullName) {
+  if (!fullName) return { nomePrincipal: '', motorizacao: '', versao: '' };
+  const tokens = String(fullName).trim().split(/\s+/);
+  const nomePrincipal = tokens[0] || '';
+  const engineIdx = tokens.findIndex((t) => /^\d+(?:\.\d+)?$/.test(t));
+  if (engineIdx === -1) {
+    return {
+      nomePrincipal,
+      motorizacao: '',
+      versao: tokens.slice(1).join(' '),
+    };
+  }
+  const enginePieces = [tokens[engineIdx]];
+  const next = tokens[engineIdx + 1];
+  if (next && /^[A-Za-z]+$/.test(next)) enginePieces.push(next);
+  const motorizacao = enginePieces.join(' ');
+  const before = tokens.slice(1, engineIdx);
+  const after = tokens.slice(engineIdx + enginePieces.length);
+  const versao = [...before, ...after].join(' ').trim();
+  return { nomePrincipal, motorizacao, versao };
+}
+
 /** Lista de marcas de carros. Retorna [{ codigo, nome }]. */
 export async function fetchFipeBrands() {
   try {
