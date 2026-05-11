@@ -84,8 +84,9 @@ export function summarizeBuyer(profile) {
 
   if (profile.tem_carro && profile.carro_atual) {
     const { marca, modelo, ano } = profile.carro_atual;
-    const carroStr = [marca, modelo, ano].filter(Boolean).join(' ');
-    parts.push(`Carro atual: ${carroStr || 'não informado'}`);
+    const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+    const carroStr = [capitalize(marca), modelo?.toUpperCase(), ano].filter(Boolean).join(' ');
+    parts.push(`Carro atual: ${carroStr}`);
   }
 
   if (profile.categorias_buscadas?.length) {
