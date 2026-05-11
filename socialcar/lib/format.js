@@ -85,37 +85,38 @@ export function summarizeBuyer(profile) {
   if (profile.tem_carro && profile.carro_atual) {
     const { marca, modelo, ano } = profile.carro_atual;
     const carroStr = [marca, modelo, ano].filter(Boolean).join(' ');
-    if (carroStr) parts.push(`tem ${carroStr}`);
-    else parts.push('tem carro atual');
+    parts.push(`Carro atual: ${carroStr || 'não informado'}`);
   }
 
   if (profile.categorias_buscadas?.length) {
     const labels = profile.categorias_buscadas
       .map((c) => CATEGORIAS.find((x) => x.id === c)?.label || c)
       .join(', ');
-    parts.push(`busca ${labels}`);
+    parts.push(`Busca: ${labels}`);
   }
 
   if (profile.faixa_preco) {
     const f = FAIXAS_PRECO.find((x) => x.id === profile.faixa_preco);
-    if (f) parts.push(`faixa ${f.label}`);
+    if (f) parts.push(`Faixa: ${f.label}`);
   }
 
-  if (Array.isArray(profile.combustivel) && profile.combustivel.length) {
+  if (profile.combustivel?.length) {
     const labels = profile.combustivel
       .map((c) => COMBUSTIVEIS_PERFIL.find((x) => x.id === c)?.label || c)
       .join(', ');
-    parts.push(`combustível ${labels}`);
-  } else if (typeof profile.combustivel === 'string' && profile.combustivel) {
-    const lbl = COMBUSTIVEIS_PERFIL.find((x) => x.id === profile.combustivel)?.label || profile.combustivel;
-    parts.push(`combustível ${lbl}`);
+    parts.push(`Combustível: ${labels}`);
+  }
+
+  if (profile.pretende_financiar) {
+    const map = {
+      sim: 'Pretende financiar',
+      a_vista: 'Compra à vista',
+      nao_sei: 'Ainda decidindo financiamento',
+    };
+    if (map[profile.pretende_financiar]) parts.push(map[profile.pretende_financiar]);
   }
 
   if (profile.estado) parts.push(profile.estado);
-
-  if (profile.pretende_financiar === 'sim') parts.push('pretende financiar');
-  if (profile.pretende_financiar === 'a_vista') parts.push('compra à vista');
-  if (profile.pretende_financiar === 'nao_sei') parts.push('ainda decidindo financiamento');
 
   return parts.join(' · ');
 }
