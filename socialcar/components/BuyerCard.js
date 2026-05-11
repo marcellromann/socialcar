@@ -62,7 +62,15 @@ export default function BuyerCard({
           </Field>
           <Field label="Estado">{profile.estado || '—'}</Field>
           <Field label="Faixa">{lookup(FAIXAS_PRECO, profile.faixa_preco) || '—'}</Field>
-          <Field label="Combustível">{lookup(COMBUSTIVEIS_PERFIL, profile.combustivel) || '—'}</Field>
+          <Field label="Combustível">
+            {(() => {
+              const arr = Array.isArray(profile.combustivel)
+                ? profile.combustivel
+                : profile.combustivel ? [profile.combustivel] : [];
+              if (!arr.length) return '—';
+              return arr.map((c) => lookup(COMBUSTIVEIS_PERFIL, c) || c).join(', ');
+            })()}
+          </Field>
           <Field label="Financia">{lookup(FINANCIAMENTO, profile.pretende_financiar) || '—'}</Field>
           <Field label="Buscando">
             {(profile.categorias_buscadas || []).map((c) => lookup(CATEGORIAS, c)).join(', ') || '—'}

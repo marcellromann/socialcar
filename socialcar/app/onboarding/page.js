@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import RequireAuth from '@/components/RequireAuth';
 import { useAuth } from '@/lib/auth';
@@ -24,15 +24,54 @@ function Inner() {
   const { appUser } = useAuth();
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
   const [data, setData] = useState({
     tem_carro: null,
     carro_atual: { marca: '', modelo: '', ano: '' },
     categorias_buscadas: [],
     faixa_preco: '',
-    combustivel: '',
+    combustivel: [],
     estado: '',
     pretende_financiar: '',
   });
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || cancel) return;
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_id', user.id)
+        .maybeSingle();
+
+      if (!userData?.id || cancel) return;
+
+      const { data: existing } = await supabase
+        .from('buyer_profiles')
+        .select('*')
+        .eq('user_id', userData.id)
+        .maybeSingle();
+
+      if (!existing || cancel) return;
+
+      setData({
+        tem_carro: existing.tem_carro,
+        carro_atual: existing.carro_atual || { marca: '', modelo: '', ano: '' },
+        categorias_buscadas: existing.categorias_buscadas || [],
+        faixa_preco: existing.faixa_preco || '',
+        combustivel: Array.isArray(existing.combustivel)
+          ? existing.combustivel
+          : existing.combustivel ? [existing.combustivel] : [],
+        estado: existing.estado || '',
+        pretende_financiar: existing.pretende_financiar || '',
+      });
+    })();
+    return () => { cancel = true; };
+  }, []);
 
   function set(key, value) {
     setData((d) => ({ ...d, [key]: value }));
@@ -47,6 +86,22 @@ function Inner() {
     }));
   }
 
+  function toggleCombustivel(id) {
+    setData((d) => {
+      const current = d.combustivel;
+      if (id === 'tanto_faz') {
+        return { ...d, combustivel: current.includes('tanto_faz') ? [] : ['tanto_faz'] };
+      }
+      const without = current.filter((c) => c !== 'tanto_faz');
+      return {
+        ...d,
+        combustivel: without.includes(id)
+          ? without.filter((c) => c !== id)
+          : [...without, id],
+      };
+    });
+  }
+
   function next() {
     if (step === 1 && data.tem_carro === false) { setStep(3); return; }
     setStep((s) => Math.min(STEPS, s + 1));
@@ -57,22 +112,78 @@ function Inner() {
     setStep((s) => Math.max(1, s - 1));
   }
 
-  async function finish() {
-    if (!appUser?.id) return;
+async function finish() {
     setSaving(true);
+    setErrorMsg('');
+    setSuccessMsg('');
     try {
-      await supabase.from('buyer_profiles').upsert({
-        user_id: appUser.id,
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setErrorMsg('Sessão expirada. Faça login novamente.'); setSaving(false); return; }
+
+      const { data: userData, error: userErr } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_id', user.id)
+        .maybeSingle();
+
+      console.log('[onboarding] userData:', userData, 'erro:', userErr);
+
+      const userId = userData?.id || appUser?.id;
+      if (!userId) { setErrorMsg('Não foi possível identificar o usuário.'); setSaving(false); return; }
+
+      const payload = {
+        user_id: userId,
         tem_carro: data.tem_carro,
         carro_atual: data.tem_carro ? data.carro_atual : null,
         categorias_buscadas: data.categorias_buscadas,
         faixa_preco: data.faixa_preco || null,
-        combustivel: data.combustivel || null,
+        combustivel: data.combustivel || [],
         estado: data.estado || null,
         pretende_financiar: data.pretende_financiar || null,
-      });
-    } catch {}
-    router.replace('/');
+        updated_at: new Date().toISOString(),
+      };
+      console.log('[onboarding] payload:', payload);
+
+      const { data: existing, error: existingErr } = await supabase
+        .from('buyer_profiles')
+        .select('user_id')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      console.log('[onboarding] existing:', existing, 'erro:', existingErr);
+
+      if (existing?.user_id) {
+        const { data: updateData, error: updateError } = await supabase
+          .from('buyer_profiles')
+          .update(payload)
+          .eq('user_id', userId)
+          .select();
+        console.log('[onboarding] UPDATE resultado:', updateData, updateError);
+        if (updateError) {
+          setErrorMsg(`Erro ao atualizar: ${updateError.message}`);
+          setSaving(false);
+          return;
+        }
+      } else {
+        const { data: insertData, error: insertError } = await supabase
+          .from('buyer_profiles')
+          .insert(payload)
+          .select();
+        console.log('[onboarding] INSERT resultado:', insertData, insertError);
+        if (insertError) {
+          setErrorMsg(`Erro ao inserir: ${insertError.message}`);
+          setSaving(false);
+          return;
+        }
+      }
+
+      setSuccessMsg('Preferências salvas!');
+      setTimeout(() => router.replace('/perfil'), 900);
+    } catch (e) {
+      console.error('[onboarding] exceção em finish:', e);
+      setErrorMsg(`Erro inesperado: ${e?.message || e}`);
+      setSaving(false);
+    }
   }
 
   const canAdvance = (() => {
@@ -81,7 +192,7 @@ function Inner() {
       case 2: return data.carro_atual.marca && data.carro_atual.modelo;
       case 3: return data.categorias_buscadas.length > 0;
       case 4: return !!data.faixa_preco;
-      case 5: return !!data.combustivel;
+      case 5: return data.combustivel.length > 0;
       case 6: return !!data.estado;
       case 7: return !!data.pretende_financiar;
       default: return false;
@@ -157,7 +268,7 @@ function Inner() {
         )}
 
         {step === 4 && (
-          <Question label="Qual sua faixa de preço?">
+          <Question label="Qual a faixa de preço?">
             <div className="space-y-2">
               {FAIXAS_PRECO.map((f) => (
                 <Choice key={f.id} block active={data.faixa_preco === f.id} onClick={() => set('faixa_preco', f.id)}>
@@ -169,10 +280,10 @@ function Inner() {
         )}
 
         {step === 5 && (
-          <Question label="Prefere qual combustível?">
+          <Question label="Prefere qual combustível?" hint="Pode marcar mais de um. &quot;Tanto faz&quot; desmarca os outros.">
             <div className="grid grid-cols-2 gap-2">
               {COMBUSTIVEIS_PERFIL.map((c) => (
-                <Choice key={c.id} active={data.combustivel === c.id} onClick={() => set('combustivel', c.id)}>
+                <Choice key={c.id} active={data.combustivel.includes(c.id)} onClick={() => toggleCombustivel(c.id)}>
                   {c.label}
                 </Choice>
               ))}
@@ -181,7 +292,7 @@ function Inner() {
         )}
 
         {step === 6 && (
-          <Question label="Em qual estado você está?">
+          <Question label="Em qual estado você mora?">
             <select className="input" value={data.estado} onChange={(e) => set('estado', e.target.value)}>
               <option value="">Selecione…</option>
               {ESTADOS_BR.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
@@ -202,6 +313,16 @@ function Inner() {
         )}
       </div>
 
+      {successMsg && (
+        <p className="mt-3 rounded-lg border border-brand-500/40 bg-brand-500/10 px-3 py-2 text-center text-sm font-semibold text-brand-500">
+          {successMsg}
+        </p>
+      )}
+      {errorMsg && (
+        <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-center text-xs font-semibold text-red-300">
+          {errorMsg}
+        </p>
+      )}
       <footer className="flex gap-3 pt-4">
         {step > 1 && (
           <button type="button" className="btn-secondary flex-1" onClick={back}>
@@ -213,8 +334,8 @@ function Inner() {
             Continuar
           </button>
         ) : (
-          <button type="button" className="btn-primary flex-1" onClick={finish} disabled={!canAdvance || saving}>
-            {saving ? 'Salvando…' : 'Concluir'}
+          <button type="button" className="btn-primary flex-1" onClick={finish} disabled={!canAdvance || saving || !!successMsg}>
+            {saving ? 'Salvando…' : successMsg ? 'Salvo!' : 'Concluir'}
           </button>
         )}
       </footer>

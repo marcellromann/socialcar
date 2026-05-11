@@ -45,6 +45,7 @@ export default function CadastroPage() {
         data: { nome: form.nome, tipo: form.tipo },
       },
     });
+    console.log('[Cadastro] signUp →', { user: data?.user, session: !!data?.session, error: err });
     if (err) {
       setError(err.message);
       setSubmitting(false);
@@ -54,19 +55,43 @@ export default function CadastroPage() {
     // Cria o registro em public.users (vincula auth_id)
     const userId = data?.user?.id;
     if (userId) {
-      const { data: existing } = await supabase
+      const { data: existing, error: lookupErr } = await supabase
         .from('users')
         .select('id')
         .eq('auth_id', userId)
         .maybeSingle();
+      console.log('[Cadastro] users lookup existente →', { existing, error: lookupErr });
+
       if (!existing) {
-        await supabase.from('users').insert({
+        const insertPayload = {
           auth_id: userId,
           email: form.email,
           nome: form.nome,
           tipo: form.tipo,
-        });
+        };
+        console.log('[Cadastro] inserindo public.users:', insertPayload);
+        const { data: inserted, error: insertErr } = await supabase
+          .from('users')
+          .insert(insertPayload)
+          .select('id, auth_id, email, nome, tipo')
+          .single();
+        console.log('[Cadastro] resultado insert public.users:', { inserted, error: insertErr });
+        if (insertErr) {
+          // 23505 = unique_violation. Pode acontecer se o AuthProvider
+          // (onAuthStateChange) já tiver inserido em paralelo. Não é erro real.
+          if (insertErr.code === '23505') {
+            console.log('[Cadastro] insert em paralelo detectado — registro já existe');
+          } else {
+            setError(`Falha ao criar perfil: ${insertErr.message}`);
+            setSubmitting(false);
+            return;
+          }
+        }
+      } else {
+        console.log('[Cadastro] já existia em public.users — id:', existing.id);
       }
+    } else {
+      console.warn('[Cadastro] signUp não retornou user.id — registro em public.users NÃO criado');
     }
 
     if (!data.session) {

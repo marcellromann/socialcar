@@ -96,16 +96,6 @@ export default async function ListingDetailPage({ params }) {
           )}
         </div>
 
-        <div className="card p-4">
-          <h2 className="display text-sm text-brand-500">Relatório SocialCar</h2>
-          <ul className="mt-3 space-y-2 text-sm text-slate-200">
-            <Item ok>Histórico FIPE conferido</Item>
-            <Item ok>Sem restrições financeiras</Item>
-            <Item ok>Sem recall em aberto</Item>
-            <Item ok>Placa validada e única na plataforma</Item>
-          </ul>
-        </div>
-
         <div className="grid gap-3">
           <Link
             href={`/chats/novo?listing=${listing.id}`}
@@ -128,19 +118,6 @@ function Detail({ label, value }) {
       <dt className="text-[11px] uppercase tracking-wide text-slate-500">{label}</dt>
       <dd className="text-sm text-white">{value || '—'}</dd>
     </div>
-  );
-}
-
-function Item({ children, ok }) {
-  return (
-    <li className="flex items-center gap-2">
-      <span className={`grid h-5 w-5 place-items-center rounded-full ${ok ? 'bg-brand-500 text-black' : 'bg-elevated text-slate-400'}`}>
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-          <path d="m5 12 5 5L20 7" />
-        </svg>
-      </span>
-      {children}
-    </li>
   );
 }
 

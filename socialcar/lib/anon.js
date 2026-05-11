@@ -35,9 +35,13 @@ export function computeMatch(listing, profile) {
     if (price >= min && price < max) matches++;
   }
 
-  if (profile.combustivel && profile.combustivel !== 'tanto_faz') {
+  const prefs = Array.isArray(profile.combustivel)
+    ? profile.combustivel
+    : profile.combustivel ? [profile.combustivel] : [];
+  const efetivos = prefs.filter((c) => c !== 'tanto_faz');
+  if (efetivos.length > 0) {
     total++;
-    if (listing.combustivel && listing.combustivel === profile.combustivel) matches++;
+    if (listing.combustivel && efetivos.includes(listing.combustivel)) matches++;
   }
 
   if (profile.estado) {

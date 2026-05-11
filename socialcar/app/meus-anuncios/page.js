@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import RequireAuth from '@/components/RequireAuth';
 import TopBar from '@/components/TopBar';
 import Sparkline, { bucketByDay } from '@/components/Sparkline';
-import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { formatKm, formatPrice } from '@/lib/format';
 
@@ -25,21 +25,48 @@ export default function MeusAnunciosPage() {
 }
 
 function Inner() {
-  const { appUser } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [items, setItems] = useState([]);
   const [events, setEvents] = useState([]);
   const [interestCounts, setInterestCounts] = useState({});
   const [loading, setLoading] = useState(true);
+  const [successMsg, setSuccessMsg] = useState(
+    searchParams.get('published') === '1' ? 'Anúncio publicado com sucesso!' : ''
+  );
+
+  useEffect(() => {
+    if (searchParams.get('published') !== '1') return;
+    const timer = setTimeout(() => {
+      setSuccessMsg('');
+      router.replace('/meus-anuncios');
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [searchParams, router]);
 
   useEffect(() => {
     let cancel = false;
     (async () => {
-      if (!appUser?.id) { setLoading(false); return; }
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        if (!cancel) setLoading(false);
+        return;
+      }
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_id', user.id)
+        .single();
+      if (!userData?.id) {
+        if (!cancel) setLoading(false);
+        return;
+      }
 
       const { data: listings } = await supabase
         .from('listings')
-        .select('id, marca, modelo, ano, km, preco, foto_principal_url, status, created_at')
-        .eq('user_id', appUser.id)
+        .select('*')
+        .eq('user_id', userData.id)
         .order('created_at', { ascending: false });
 
       const ids = (listings || []).map((l) => l.id);
@@ -71,7 +98,7 @@ function Inner() {
       }
     })();
     return () => { cancel = true; };
-  }, [appUser?.id]);
+  }, []);
 
   async function toggleStatus(id, current) {
     const next = current === 'ativo' ? 'pausado' : 'ativo';
@@ -93,6 +120,12 @@ function Inner() {
     <>
       <TopBar title="Meus anúncios" back />
       <div className="page-pad space-y-3">
+        {successMsg && (
+          <div className="rounded-xl border border-brand-500/30 bg-brand-500/10 p-3 text-sm font-semibold text-brand-500">
+            {successMsg}
+          </div>
+        )}
+
         <Link href="/anunciar" className="btn-primary w-full">+ Novo anúncio</Link>
 
         {loading ? (

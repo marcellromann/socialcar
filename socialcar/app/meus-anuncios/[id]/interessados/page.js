@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation';
 import RequireAuth from '@/components/RequireAuth';
 import TopBar from '@/components/TopBar';
 import BuyerCard from '@/components/BuyerCard';
-import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { formatKm, formatPrice } from '@/lib/format';
 
@@ -19,7 +18,6 @@ export default function InteressadosPage() {
 
 function Inner() {
   const { id: listingId } = useParams();
-  const { appUser } = useAuth();
   const [listing, setListing] = useState(null);
   const [interests, setInterests] = useState([]);
   const [profiles, setProfiles] = useState({});
@@ -29,7 +27,22 @@ function Inner() {
   useEffect(() => {
     let cancel = false;
     (async () => {
-      if (!appUser?.id) { setLoading(false); return; }
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        if (!cancel) { setAuthorized(false); setLoading(false); }
+        return;
+      }
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_id', user.id)
+        .single();
+
+      if (!userData?.id) {
+        if (!cancel) { setAuthorized(false); setLoading(false); }
+        return;
+      }
 
       const { data: l } = await supabase
         .from('listings')
@@ -37,7 +50,7 @@ function Inner() {
         .eq('id', listingId)
         .maybeSingle();
 
-      if (!l || l.user_id !== appUser.id) {
+      if (!l || l.user_id !== userData.id) {
         if (!cancel) { setAuthorized(false); setLoading(false); }
         return;
       }
@@ -67,7 +80,7 @@ function Inner() {
       }
     })();
     return () => { cancel = true; };
-  }, [listingId, appUser?.id]);
+  }, [listingId]);
 
   if (authorized === false) {
     return (

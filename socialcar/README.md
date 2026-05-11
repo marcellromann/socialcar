@@ -168,6 +168,48 @@ selo "Verificado" no feed).
 
 ---
 
+## OneDrive: excluindo `.next/` e `node_modules/` do sync
+
+O projeto fica dentro de uma pasta sincronizada pelo OneDrive, e as pastas
+`.next/` e `node_modules/` mudam constantemente durante o desenvolvimento —
+isso gera milhares de operações de sync, lentidão no `npm run dev` e
+conflitos. O OneDrive **não** suporta um arquivo `.onedriveignore`, então a
+exclusão precisa ser feita por uma das opções abaixo:
+
+### Opção A — Marcar como "Sempre disponível somente neste dispositivo"
+
+1. No Explorador de Arquivos, abra a pasta `socialcar/`.
+2. Clique com o botão direito em `.next` → **OneDrive → Liberar espaço**
+   (ou desmarque "Sempre manter neste dispositivo" se aparecer).
+3. Repita para `node_modules`.
+
+> ⚠️ Isso remove a cópia local mas **não** impede o sync. Para impedir o
+> sync de fato, use a Opção B ou C.
+
+### Opção B — Excluir pelas configurações do OneDrive
+
+1. Clique no ícone do OneDrive na bandeja do sistema → **Engrenagem** →
+   **Configurações**.
+2. Aba **Conta** → **Escolher pastas**.
+3. Desmarque qualquer pasta que contenha `.next` ou `node_modules`.
+
+> Limitação: o OneDrive só permite excluir pastas no nível raiz do sync,
+> não subpastas profundas. Se isso não funcionar, use a Opção C.
+
+### Opção C (recomendada) — Mover o projeto para fora do OneDrive
+
+A solução mais limpa é manter o repositório fora do OneDrive:
+
+```powershell
+# Exemplo: mover para C:\dev\socialcar
+git clone <repo-url> C:\dev\socialcar
+```
+
+Use o OneDrive apenas para documentos pessoais. Projetos Node/Next devem
+ficar em um diretório local não sincronizado.
+
+---
+
 ## Pastas
 
 ```

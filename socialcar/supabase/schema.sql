@@ -31,11 +31,24 @@ create table if not exists public.users (
   auth_id     uuid unique,
   email       text unique not null,
   nome        text,
+  telefone    text,
+  avatar_url  text,
   tipo        user_kind not null default 'comprador',
   created_at  timestamptz not null default now()
 );
 
 create index if not exists users_auth_id_idx on public.users (auth_id);
+
+-- Garante a constraint unique em auth_id mesmo em bancos antigos onde a tabela
+-- foi criada sem ela. ALTER ... ADD CONSTRAINT não é idempotente nativamente,
+-- então usamos um bloco anônimo que ignora o erro de duplicate_object.
+do $$ begin
+  alter table public.users add constraint users_auth_id_key unique (auth_id);
+exception when duplicate_object then null; end $$;
+
+-- Bancos antigos: garante colunas telefone/avatar_url.
+alter table public.users add column if not exists telefone   text;
+alter table public.users add column if not exists avatar_url text;
 
 -- ----------------------------------------------------------------------------
 -- BUYER_PROFILES (questionário do comprador)
@@ -46,11 +59,38 @@ create table if not exists public.buyer_profiles (
   carro_atual          jsonb,                       -- { marca, modelo, ano }
   categorias_buscadas  text[] default '{}',         -- hatch, sedan, suv, caminhonete, eletrico, moto
   faixa_preco          text,                        -- ate_50k, 50k_100k, 100k_150k, 150k_200k, acima_200k
-  combustivel          text,                        -- flex, diesel, eletrico, hibrido, tanto_faz
+  combustivel          text[] default '{}',         -- gasolina, etanol, diesel, eletrico, hibrido, tanto_faz
   estado               text,
   pretende_financiar   text,                        -- sim, a_vista, nao_sei
   updated_at           timestamptz not null default now()
 );
+
+-- Garante constraint unique explícita em user_id (PK já provê unicidade, mas
+-- alguns clientes preferem a constraint nomeada para usar em ON CONFLICT).
+do $$ begin
+  alter table public.buyer_profiles
+    add constraint buyer_profiles_user_id_key unique (user_id);
+exception when duplicate_object then null;
+when duplicate_table then null;
+end $$;
+
+-- Migração: combustivel de text → text[] em bancos antigos.
+do $$
+declare
+  v_type text;
+begin
+  select data_type into v_type
+  from information_schema.columns
+  where table_schema = 'public' and table_name = 'buyer_profiles' and column_name = 'combustivel';
+
+  if v_type = 'text' then
+    alter table public.buyer_profiles
+      alter column combustivel drop default,
+      alter column combustivel type text[] using
+        case when combustivel is null then '{}'::text[] else array[combustivel] end,
+      alter column combustivel set default '{}';
+  end if;
+end $$;
 
 -- ----------------------------------------------------------------------------
 -- LISTINGS (anúncios — placa armazenada como hash)
@@ -238,7 +278,7 @@ begin
     combustivel, cambio, cor, descricao, foto_principal_url, status, verificado
   ) values (
     p_user_id, p_placa_hash, p_marca, p_modelo, p_ano, p_versao, p_km, p_preco,
-    p_combustivel, p_cambio, p_cor, p_descricao, p_foto_principal_url, 'em_analise', true
+    p_combustivel, p_cambio, p_cor, p_descricao, p_foto_principal_url, 'ativo', true
   )
   returning id into v_id;
 
@@ -379,3 +419,28 @@ create policy "listing_photos_public_read"
 create policy "listing_photos_anon_insert"
   on storage.objects for insert
   with check ( bucket_id = 'listing-photos' );
+
+-- ----------------------------------------------------------------------------
+-- STORAGE: bucket público para fotos de perfil
+-- Crie em: Storage > New bucket > nome `avatars`, marque Public bucket.
+-- ----------------------------------------------------------------------------
+drop policy if exists "avatars_public_read"  on storage.objects;
+drop policy if exists "avatars_anon_insert"  on storage.objects;
+drop policy if exists "avatars_anon_update"  on storage.objects;
+drop policy if exists "avatars_anon_delete"  on storage.objects;
+
+create policy "avatars_public_read"
+  on storage.objects for select
+  using ( bucket_id = 'avatars' );
+
+create policy "avatars_anon_insert"
+  on storage.objects for insert
+  with check ( bucket_id = 'avatars' );
+
+create policy "avatars_anon_update"
+  on storage.objects for update
+  using ( bucket_id = 'avatars' );
+
+create policy "avatars_anon_delete"
+  on storage.objects for delete
+  using ( bucket_id = 'avatars' );
