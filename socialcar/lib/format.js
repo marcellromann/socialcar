@@ -86,7 +86,7 @@ export function summarizeBuyer(profile) {
     const { marca, modelo, ano } = profile.carro_atual;
     const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
     const carroStr = [capitalize(marca), modelo?.toUpperCase(), ano].filter(Boolean).join(' ');
-    parts.push(`Carro atual: ${carroStr}`);
+    if (carroStr.trim()) parts.push(`Carro atual: ${carroStr}`);
   }
 
   if (profile.categorias_buscadas?.length) {

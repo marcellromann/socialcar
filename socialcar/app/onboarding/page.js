@@ -140,6 +140,8 @@ async function finish() {
       const userId = userData?.id || appUser?.id;
       if (!userId) { setErrorMsg('Não foi possível identificar o usuário.'); setSaving(false); return; }
 
+      console.log('[onboarding] carro_atual value:', data.carro_atual)
+
       const payload = {
         user_id: userId,
         tem_carro: data.tem_carro,
