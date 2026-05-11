@@ -58,9 +58,18 @@ function Inner() {
 
       if (!existing || cancel) return;
 
+      const carroExistente = existing.carro_atual;
+      const temDadosCarro = carroExistente && (carroExistente.marca || carroExistente.modelo || carroExistente.ano);
+
       setData({
         tem_carro: existing.tem_carro,
-        carro_atual: existing.carro_atual || { marca: '', modelo: '', ano: '' },
+        carro_atual: temDadosCarro
+          ? {
+              marca: carroExistente.marca || '',
+              modelo: carroExistente.modelo || '',
+              ano: carroExistente.ano || '',
+            }
+          : { marca: '', modelo: '', ano: '' },
         categorias_buscadas: existing.categorias_buscadas || [],
         faixa_preco: existing.faixa_preco || '',
         combustivel: Array.isArray(existing.combustivel)
@@ -134,7 +143,9 @@ async function finish() {
       const payload = {
         user_id: userId,
         tem_carro: data.tem_carro,
-        carro_atual: data.tem_carro ? data.carro_atual : null,
+        carro_atual: data.tem_carro && (data.carro_atual?.marca || data.carro_atual?.modelo)
+          ? data.carro_atual
+          : null,
         categorias_buscadas: data.categorias_buscadas,
         faixa_preco: data.faixa_preco || null,
         combustivel: data.combustivel || [],
