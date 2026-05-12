@@ -23,7 +23,7 @@ export function AuthProvider({ children }) {
 
     const { data: existing, error: lookupErr } = await supabase
       .from('users')
-      .select('id, email, nome, tipo, auth_id, telefone, avatar_url, created_at')
+      .select('id, email, nome, tipo, auth_id, telefone, avatar_url, created_at, cep, rua, numero, complemento, bairro, cidade, estado_endereco, status')
       .eq('auth_id', authUser.id)
       .maybeSingle();
 
@@ -44,7 +44,7 @@ export function AuthProvider({ children }) {
       const { data: inserted, error: insertErr } = await supabase
         .from('users')
         .insert(insertPayload)
-        .select('id, email, nome, tipo, auth_id, telefone, avatar_url, created_at')
+        .select('id, email, nome, tipo, auth_id, telefone, avatar_url, created_at, cep, rua, numero, complemento, bairro, cidade, estado_endereco, status')
         .single();
       console.log('[auth] resultado insert public.users:', { inserted, error: insertErr });
 
@@ -55,7 +55,7 @@ export function AuthProvider({ children }) {
           console.log('[auth] insert em paralelo detectado — refetch do registro existente');
           const { data: refetched } = await supabase
             .from('users')
-            .select('id, email, nome, tipo, auth_id, telefone, avatar_url, created_at')
+            .select('id, email, nome, tipo, auth_id, telefone, avatar_url, created_at, cep, rua, numero, complemento, bairro, cidade, estado_endereco, status')
             .eq('auth_id', authUser.id)
             .maybeSingle();
           data = refetched || null;

@@ -85,6 +85,20 @@ export default function SwipeCard({ listing, onSwipe, depth = 0 }) {
           </div>
         )}
 
+        {/* Status do vendedor */}
+        {listing.seller_status && (
+          <div className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-black/70 px-2.5 py-1 backdrop-blur">
+            <span
+              className={`h-2 w-2 rounded-full ${
+                listing.seller_status === 'online' ? 'bg-emerald-400' : 'bg-slate-400'
+              }`}
+            />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-white">
+              {listing.seller_status === 'online' ? 'Online' : 'Ausente'}
+            </span>
+          </div>
+        )}
+
         {/* gradient + info */}
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-5 pt-24">
           <div className="flex items-center gap-2 mb-2">

@@ -50,6 +50,21 @@ exception when duplicate_object then null; end $$;
 alter table public.users add column if not exists telefone   text;
 alter table public.users add column if not exists avatar_url text;
 
+-- Endereço e status (preenchidos pela página /perfil)
+alter table public.users add column if not exists cep              text;
+alter table public.users add column if not exists rua              text;
+alter table public.users add column if not exists numero           text;
+alter table public.users add column if not exists complemento      text;
+alter table public.users add column if not exists bairro           text;
+alter table public.users add column if not exists cidade           text;
+alter table public.users add column if not exists estado_endereco  text;
+alter table public.users add column if not exists status           text not null default 'online';
+
+do $$ begin
+  alter table public.users add constraint users_status_check
+    check (status in ('online', 'ausente'));
+exception when duplicate_object then null; end $$;
+
 -- ----------------------------------------------------------------------------
 -- BUYER_PROFILES (questionário do comprador)
 -- ----------------------------------------------------------------------------

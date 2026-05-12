@@ -5,7 +5,7 @@ import TopBar from '@/components/TopBar';
 export const revalidate = 0;
 
 const FEED_FIELDS =
-  'id, marca, modelo, ano, versao, km, preco, cidade, estado, foto_principal_url, verificado, created_at';
+  'id, user_id, marca, modelo, ano, versao, km, preco, cidade, estado, foto_principal_url, verificado, created_at';
 
 async function fetchFeed() {
   const { data, error } = await supabase
@@ -15,15 +15,27 @@ async function fetchFeed() {
     .order('created_at', { ascending: false })
     .limit(30);
 
+  let listings = data ?? [];
   if (error) {
     const fb = await supabase
       .from('listings')
       .select(FEED_FIELDS)
       .order('created_at', { ascending: false })
       .limit(30);
-    return fb.data ?? [];
+    listings = fb.data ?? [];
   }
-  return data ?? [];
+
+  const sellerIds = [...new Set(listings.map((l) => l.user_id).filter(Boolean))];
+  if (sellerIds.length) {
+    const { data: sellers } = await supabase
+      .from('users')
+      .select('id, status')
+      .in('id', sellerIds);
+    const byId = new Map((sellers || []).map((s) => [s.id, s.status]));
+    listings = listings.map((l) => ({ ...l, seller_status: byId.get(l.user_id) || 'online' }));
+  }
+
+  return listings;
 }
 
 export default async function HomePage() {
