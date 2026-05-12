@@ -120,23 +120,5 @@ export function summarizeBuyer(profile) {
     if (f) parts.push(`Faixa: ${f.label}`);
   }
 
-  if (profile.combustivel?.length) {
-    const labels = profile.combustivel
-      .map((c) => COMBUSTIVEIS_PERFIL.find((x) => x.id === c)?.label || c)
-      .join(', ');
-    parts.push(`Combustível: ${labels}`);
-  }
-
-  if (profile.pretende_financiar) {
-    const map = {
-      sim: 'Pretende financiar',
-      a_vista: 'Compra à vista',
-      nao_sei: 'Ainda decidindo financiamento',
-    };
-    if (map[profile.pretende_financiar]) parts.push(map[profile.pretende_financiar]);
-  }
-
-  if (profile.estado) parts.push(profile.estado);
-
   return parts.join(' · ');
 }

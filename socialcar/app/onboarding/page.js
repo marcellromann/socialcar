@@ -1,15 +1,23 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import RequireAuth from '@/components/RequireAuth';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
-import {
-  CATEGORIAS, COMBUSTIVEIS_PERFIL, ESTADOS_BR, FAIXAS_PRECO, FINANCIAMENTO,
-} from '@/lib/format';
+import { CATEGORIAS, FAIXAS_PRECO } from '@/lib/format';
 
-const STEPS = 7;
+const STEPS = 4;
+const FIPE_BASE = 'https://parallelum.com.br/fipe/api/v1/carros/marcas';
+const FETCH_TIMEOUT_MS = 5000;
+
+const EMPTY_CARRO = {
+  marca: '',
+  modelo: '',
+  ano: '',
+  codigoMarca: '',
+  codigoModelo: '',
+};
 
 export default function OnboardingPage() {
   return (
@@ -28,13 +36,14 @@ function Inner() {
   const [errorMsg, setErrorMsg] = useState('');
   const [data, setData] = useState({
     tem_carro: null,
-    carro_atual: { marca: '', modelo: '', ano: '' },
+    carro_atual: { ...EMPTY_CARRO },
     categorias_buscadas: [],
     faixa_preco: '',
-    combustivel: [],
-    estado: '',
-    pretende_financiar: '',
   });
+
+  const [marcas, setMarcas] = useState({ loading: false, list: [], failed: false });
+  const [modelos, setModelos] = useState({ loading: false, list: [], failed: false });
+  const [anos, setAnos] = useState({ loading: false, list: [], failed: false });
 
   useEffect(() => {
     let cancel = false;
@@ -58,32 +67,113 @@ function Inner() {
 
       if (!existing || cancel) return;
 
-      const carroExistente = existing.carro_atual;
-      const temDadosCarro = carroExistente && (carroExistente.marca || carroExistente.modelo || carroExistente.ano);
-
+      const carroExistente = existing.carro_atual || {};
       setData({
         tem_carro: existing.tem_carro,
-        carro_atual: temDadosCarro
-          ? {
-              marca: carroExistente.marca || '',
-              modelo: carroExistente.modelo || '',
-              ano: carroExistente.ano || '',
-            }
-          : { marca: '', modelo: '', ano: '' },
+        carro_atual: {
+          marca: carroExistente.marca || '',
+          modelo: carroExistente.modelo || '',
+          ano: carroExistente.ano || '',
+          codigoMarca: carroExistente.codigoMarca || '',
+          codigoModelo: carroExistente.codigoModelo || '',
+        },
         categorias_buscadas: existing.categorias_buscadas || [],
         faixa_preco: existing.faixa_preco || '',
-        combustivel: Array.isArray(existing.combustivel)
-          ? existing.combustivel
-          : existing.combustivel ? [existing.combustivel] : [],
-        estado: existing.estado || '',
-        pretende_financiar: existing.pretende_financiar || '',
       });
     })();
     return () => { cancel = true; };
   }, []);
 
+  // Step 2 — busca marcas quando entrar na etapa
+  useEffect(() => {
+    if (step !== 2 || data.tem_carro !== true) return;
+    if (marcas.list.length || marcas.loading || marcas.failed) return;
+
+    let cancel = false;
+    (async () => {
+      setMarcas({ loading: true, list: [], failed: false });
+      try {
+        const json = await fetchWithTimeout(FIPE_BASE, FETCH_TIMEOUT_MS);
+        if (cancel) return;
+        const sorted = (json || []).slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+        setMarcas({ loading: false, list: sorted, failed: false });
+      } catch {
+        if (!cancel) setMarcas({ loading: false, list: [], failed: true });
+      }
+    })();
+    return () => { cancel = true; };
+  }, [step, data.tem_carro, marcas.list.length, marcas.loading, marcas.failed]);
+
+  // Step 2 — busca modelos quando marca selecionada
+  useEffect(() => {
+    if (step !== 2 || data.tem_carro !== true) return;
+    const codigoMarca = data.carro_atual.codigoMarca;
+    if (!codigoMarca) {
+      setModelos({ loading: false, list: [], failed: false });
+      return;
+    }
+    let cancel = false;
+    (async () => {
+      setModelos({ loading: true, list: [], failed: false });
+      try {
+        const json = await fetchWithTimeout(
+          `${FIPE_BASE}/${codigoMarca}/modelos`,
+          FETCH_TIMEOUT_MS
+        );
+        if (cancel) return;
+        const list = (json?.modelos || []).slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+        setModelos({ loading: false, list, failed: false });
+      } catch {
+        if (!cancel) setModelos({ loading: false, list: [], failed: true });
+      }
+    })();
+    return () => { cancel = true; };
+  }, [step, data.tem_carro, data.carro_atual.codigoMarca]);
+
+  // Step 2 — busca anos quando modelo selecionado
+  useEffect(() => {
+    if (step !== 2 || data.tem_carro !== true) return;
+    const codigoMarca = data.carro_atual.codigoMarca;
+    const codigoModelo = data.carro_atual.codigoModelo;
+    if (!codigoMarca || !codigoModelo) {
+      setAnos({ loading: false, list: [], failed: false });
+      return;
+    }
+    let cancel = false;
+    (async () => {
+      setAnos({ loading: true, list: [], failed: false });
+      try {
+        const json = await fetchWithTimeout(
+          `${FIPE_BASE}/${codigoMarca}/modelos/${codigoModelo}/anos`,
+          FETCH_TIMEOUT_MS
+        );
+        if (cancel) return;
+        setAnos({ loading: false, list: json || [], failed: false });
+      } catch {
+        if (!cancel) setAnos({ loading: false, list: [], failed: true });
+      }
+    })();
+    return () => { cancel = true; };
+  }, [step, data.tem_carro, data.carro_atual.codigoMarca, data.carro_atual.codigoModelo]);
+
   function set(key, value) {
     setData((d) => ({ ...d, [key]: value }));
+  }
+
+  function setCarroField(patch) {
+    setData((d) => ({ ...d, carro_atual: { ...d.carro_atual, ...patch } }));
+  }
+
+  function pickMarca(codigo, nome) {
+    setCarroField({ codigoMarca: codigo, marca: nome, codigoModelo: '', modelo: '', ano: '' });
+  }
+
+  function pickModelo(codigo, nome) {
+    setCarroField({ codigoModelo: codigo, modelo: nome, ano: '' });
+  }
+
+  function pickAno(nome) {
+    setCarroField({ ano: nome });
   }
 
   function toggleCategoria(id) {
@@ -93,22 +183,6 @@ function Inner() {
         ? d.categorias_buscadas.filter((c) => c !== id)
         : [...d.categorias_buscadas, id],
     }));
-  }
-
-  function toggleCombustivel(id) {
-    setData((d) => {
-      const current = d.combustivel;
-      if (id === 'tanto_faz') {
-        return { ...d, combustivel: current.includes('tanto_faz') ? [] : ['tanto_faz'] };
-      }
-      const without = current.filter((c) => c !== 'tanto_faz');
-      return {
-        ...d,
-        combustivel: without.includes(id)
-          ? without.filter((c) => c !== id)
-          : [...without, id],
-      };
-    });
   }
 
   function next() {
@@ -121,7 +195,7 @@ function Inner() {
     setStep((s) => Math.max(1, s - 1));
   }
 
-async function finish() {
+  async function finish() {
     setSaving(true);
     setErrorMsg('');
     setSuccessMsg('');
@@ -129,71 +203,57 @@ async function finish() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setErrorMsg('Sessão expirada. Faça login novamente.'); setSaving(false); return; }
 
-      const { data: userData, error: userErr } = await supabase
+      const { data: userData } = await supabase
         .from('users')
         .select('id')
         .eq('auth_id', user.id)
         .maybeSingle();
 
-      console.log('[onboarding] userData:', userData, 'erro:', userErr);
-
       const userId = userData?.id || appUser?.id;
       if (!userId) { setErrorMsg('Não foi possível identificar o usuário.'); setSaving(false); return; }
 
-      console.log('[onboarding] carro_atual value:', data.carro_atual)
+      const c = data.carro_atual;
+      const carroAtual = data.tem_carro && (c.marca || c.modelo)
+        ? {
+            marca: c.marca || '',
+            modelo: c.modelo || '',
+            ano: c.ano || '',
+            codigoMarca: c.codigoMarca || '',
+            codigoModelo: c.codigoModelo || '',
+          }
+        : null;
 
       const payload = {
         user_id: userId,
         tem_carro: data.tem_carro,
-        carro_atual: data.tem_carro && (data.carro_atual?.marca || data.carro_atual?.modelo)
-          ? data.carro_atual
-          : null,
+        carro_atual: carroAtual,
         categorias_buscadas: data.categorias_buscadas,
         faixa_preco: data.faixa_preco || null,
-        combustivel: data.combustivel || [],
-        estado: data.estado || null,
-        pretende_financiar: data.pretende_financiar || null,
         updated_at: new Date().toISOString(),
       };
-      console.log('[onboarding] payload:', payload);
 
-      const { data: existing, error: existingErr } = await supabase
+      const { data: existing } = await supabase
         .from('buyer_profiles')
         .select('user_id')
         .eq('user_id', userId)
         .maybeSingle();
 
-      console.log('[onboarding] existing:', existing, 'erro:', existingErr);
-
       if (existing?.user_id) {
-        const { data: updateData, error: updateError } = await supabase
+        const { error } = await supabase
           .from('buyer_profiles')
           .update(payload)
-          .eq('user_id', userId)
-          .select();
-        console.log('[onboarding] UPDATE resultado:', updateData, updateError);
-        if (updateError) {
-          setErrorMsg(`Erro ao atualizar: ${updateError.message}`);
-          setSaving(false);
-          return;
-        }
+          .eq('user_id', userId);
+        if (error) { setErrorMsg(`Erro ao atualizar: ${error.message}`); setSaving(false); return; }
       } else {
-        const { data: insertData, error: insertError } = await supabase
+        const { error } = await supabase
           .from('buyer_profiles')
-          .insert(payload)
-          .select();
-        console.log('[onboarding] INSERT resultado:', insertData, insertError);
-        if (insertError) {
-          setErrorMsg(`Erro ao inserir: ${insertError.message}`);
-          setSaving(false);
-          return;
-        }
+          .insert(payload);
+        if (error) { setErrorMsg(`Erro ao inserir: ${error.message}`); setSaving(false); return; }
       }
 
       setSuccessMsg('Preferências salvas!');
       setTimeout(() => router.replace('/perfil'), 900);
     } catch (e) {
-      console.error('[onboarding] exceção em finish:', e);
       setErrorMsg(`Erro inesperado: ${e?.message || e}`);
       setSaving(false);
     }
@@ -202,12 +262,9 @@ async function finish() {
   const canAdvance = (() => {
     switch (step) {
       case 1: return data.tem_carro !== null;
-      case 2: return data.carro_atual.marca && data.carro_atual.modelo;
+      case 2: return !!(data.carro_atual.marca && data.carro_atual.modelo);
       case 3: return data.categorias_buscadas.length > 0;
       case 4: return !!data.faixa_preco;
-      case 5: return data.combustivel.length > 0;
-      case 6: return !!data.estado;
-      case 7: return !!data.pretende_financiar;
       default: return false;
     }
   })();
@@ -253,17 +310,112 @@ async function finish() {
         )}
 
         {step === 2 && (
-          <Question label="Qual é o seu carro atual?">
+          <Question label="Qual é o seu veículo?">
             <div className="space-y-3">
-              <input className="input" placeholder="Marca"
-                value={data.carro_atual.marca}
-                onChange={(e) => set('carro_atual', { ...data.carro_atual, marca: e.target.value })} />
-              <input className="input" placeholder="Modelo"
-                value={data.carro_atual.modelo}
-                onChange={(e) => set('carro_atual', { ...data.carro_atual, modelo: e.target.value })} />
-              <input className="input" type="number" placeholder="Ano"
-                value={data.carro_atual.ano}
-                onChange={(e) => set('carro_atual', { ...data.carro_atual, ano: e.target.value })} />
+              {/* Marca */}
+              <FipeField label="Selecionar marca">
+                {marcas.failed ? (
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="Digite a marca"
+                    value={data.carro_atual.marca}
+                    onChange={(e) => setCarroField({
+                      marca: e.target.value,
+                      codigoMarca: '',
+                      modelo: '',
+                      codigoModelo: '',
+                      ano: '',
+                    })}
+                  />
+                ) : (
+                  <select
+                    className="input"
+                    value={data.carro_atual.codigoMarca}
+                    onChange={(e) => {
+                      const codigo = e.target.value;
+                      const item = marcas.list.find((m) => m.codigo === codigo);
+                      if (codigo && item) pickMarca(codigo, item.nome);
+                      else pickMarca('', '');
+                    }}
+                    disabled={marcas.loading}
+                  >
+                    <option value="">
+                      {marcas.loading ? 'Carregando…' : 'Selecionar marca'}
+                    </option>
+                    {marcas.list.map((m) => (
+                      <option key={m.codigo} value={m.codigo}>{m.nome}</option>
+                    ))}
+                  </select>
+                )}
+              </FipeField>
+
+              {/* Modelo */}
+              {(data.carro_atual.codigoMarca || (marcas.failed && data.carro_atual.marca)) && (
+                <FipeField label="Selecionar modelo">
+                  {modelos.failed || marcas.failed ? (
+                    <input
+                      className="input"
+                      type="text"
+                      placeholder="Digite o modelo"
+                      value={data.carro_atual.modelo}
+                      onChange={(e) => setCarroField({
+                        modelo: e.target.value,
+                        codigoModelo: '',
+                        ano: '',
+                      })}
+                    />
+                  ) : (
+                    <select
+                      className="input"
+                      value={data.carro_atual.codigoModelo}
+                      onChange={(e) => {
+                        const codigo = e.target.value;
+                        const item = modelos.list.find((m) => String(m.codigo) === codigo);
+                        if (codigo && item) pickModelo(codigo, item.nome);
+                        else pickModelo('', '');
+                      }}
+                      disabled={modelos.loading}
+                    >
+                      <option value="">
+                        {modelos.loading ? 'Carregando…' : 'Selecionar modelo'}
+                      </option>
+                      {modelos.list.map((m) => (
+                        <option key={m.codigo} value={m.codigo}>{m.nome}</option>
+                      ))}
+                    </select>
+                  )}
+                </FipeField>
+              )}
+
+              {/* Ano */}
+              {(data.carro_atual.codigoModelo || (modelos.failed && data.carro_atual.modelo)) && (
+                <FipeField label="Selecionar ano">
+                  {anos.failed || modelos.failed || marcas.failed ? (
+                    <input
+                      className="input"
+                      type="number"
+                      placeholder="Digite o ano"
+                      value={data.carro_atual.ano}
+                      onChange={(e) => setCarroField({ ano: e.target.value })}
+                    />
+                  ) : (
+                    <select
+                      className="input"
+                      value={data.carro_atual.ano}
+                      onChange={(e) => pickAno(e.target.value)}
+                      disabled={anos.loading}
+                    >
+                      <option value="">
+                        {anos.loading ? 'Carregando…' : 'Selecionar ano'}
+                      </option>
+                      {anos.list.map((a) => (
+                        <option key={a.codigo} value={a.nome}>{a.nome}</option>
+                      ))}
+                    </select>
+                  )}
+                </FipeField>
+              )}
             </div>
           </Question>
         )}
@@ -285,39 +437,6 @@ async function finish() {
             <div className="space-y-2">
               {FAIXAS_PRECO.map((f) => (
                 <Choice key={f.id} block active={data.faixa_preco === f.id} onClick={() => set('faixa_preco', f.id)}>
-                  {f.label}
-                </Choice>
-              ))}
-            </div>
-          </Question>
-        )}
-
-        {step === 5 && (
-          <Question label="Prefere qual combustível?" hint="Pode marcar mais de um. &quot;Tanto faz&quot; desmarca os outros.">
-            <div className="grid grid-cols-2 gap-2">
-              {COMBUSTIVEIS_PERFIL.map((c) => (
-                <Choice key={c.id} active={data.combustivel.includes(c.id)} onClick={() => toggleCombustivel(c.id)}>
-                  {c.label}
-                </Choice>
-              ))}
-            </div>
-          </Question>
-        )}
-
-        {step === 6 && (
-          <Question label="Em qual estado você mora?">
-            <select className="input" value={data.estado} onChange={(e) => set('estado', e.target.value)}>
-              <option value="">Selecione…</option>
-              {ESTADOS_BR.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
-            </select>
-          </Question>
-        )}
-
-        {step === 7 && (
-          <Question label="Você pretende financiar?">
-            <div className="space-y-2">
-              {FINANCIAMENTO.map((f) => (
-                <Choice key={f.id} block active={data.pretende_financiar === f.id} onClick={() => set('pretende_financiar', f.id)}>
                   {f.label}
                 </Choice>
               ))}
@@ -353,6 +472,27 @@ async function finish() {
         )}
       </footer>
     </main>
+  );
+}
+
+async function fetchWithTimeout(url, ms) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+function FipeField({ label, children }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-slate-400">{label}</span>
+      {children}
+    </label>
   );
 }
 
