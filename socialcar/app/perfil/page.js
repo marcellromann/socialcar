@@ -38,30 +38,18 @@ function Inner() {
   }, [appUser?.nome, appUser?.telefone]);
 
   useEffect(() => {
+    if (!appUser?.id) { setLoadingProfile(false); return; }
     let cancel = false;
     (async () => {
       setLoadingProfile(true);
       try {
-        const { data: authData } = await supabase.auth.getUser();
-        const authUser = authData?.user;
-        if (!authUser || cancel) { setLoadingProfile(false); return; }
-
-        const { data: userData } = await supabase
-          .from('users')
-          .select('id')
-          .eq('auth_id', authUser.id)
-          .maybeSingle();
-
-        if (!userData?.id || cancel) { setLoadingProfile(false); return; }
-
         const { data: bp } = await supabase
           .from('buyer_profiles')
           .select('*')
-          .eq('user_id', userData.id)
+          .eq('user_id', appUser.id)
           .order('updated_at', { ascending: false })
           .limit(1)
           .maybeSingle();
-
         if (!cancel) setProfile(bp);
       } finally {
         if (!cancel) setLoadingProfile(false);
@@ -237,7 +225,10 @@ function Inner() {
             </Link>
           </header>
           {loadingProfile ? (
-            <p className="mt-2 text-sm text-slate-400">Carregando…</p>
+            <div className="mt-3 space-y-2">
+              <div className="skeleton h-3 w-3/4" />
+              <div className="skeleton h-3 w-1/2" />
+            </div>
           ) : profile ? (
             <p className="mt-2 text-sm text-slate-200">{summarizeBuyer(profile)}</p>
           ) : (

@@ -33,10 +33,11 @@ async function fetchPhotos(id) {
 }
 
 export default async function ListingDetailPage({ params }) {
-  const listing = await fetchListing(params.id);
+  const [listing, photos] = await Promise.all([
+    fetchListing(params.id),
+    fetchPhotos(params.id),
+  ]);
   if (!listing) notFound();
-
-  const photos = await fetchPhotos(params.id);
   const sim = simulatePayment(listing.preco);
 
   return (

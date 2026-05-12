@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import RequireAuth from '@/components/RequireAuth';
 import TopBar from '@/components/TopBar';
 import Sparkline, { bucketByDay } from '@/components/Sparkline';
+import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { formatKm, formatPrice } from '@/lib/format';
 
@@ -27,6 +28,7 @@ export default function MeusAnunciosPage() {
 function Inner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { appUser } = useAuth();
   const [items, setItems] = useState([]);
   const [events, setEvents] = useState([]);
   const [interestCounts, setInterestCounts] = useState({});
@@ -45,28 +47,14 @@ function Inner() {
   }, [searchParams, router]);
 
   useEffect(() => {
+    if (!appUser?.id) return;
     let cancel = false;
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        if (!cancel) setLoading(false);
-        return;
-      }
-
-      const { data: userData } = await supabase
-        .from('users')
-        .select('id')
-        .eq('auth_id', user.id)
-        .single();
-      if (!userData?.id) {
-        if (!cancel) setLoading(false);
-        return;
-      }
-
+      setLoading(true);
       const { data: listings } = await supabase
         .from('listings')
         .select('*')
-        .eq('user_id', userData.id)
+        .eq('user_id', appUser.id)
         .order('created_at', { ascending: false });
 
       const ids = (listings || []).map((l) => l.id);
@@ -98,7 +86,7 @@ function Inner() {
       }
     })();
     return () => { cancel = true; };
-  }, []);
+  }, [appUser?.id]);
 
   async function toggleStatus(id, current) {
     const next = current === 'ativo' ? 'pausado' : 'ativo';
@@ -129,7 +117,26 @@ function Inner() {
         <Link href="/anunciar" className="btn-primary w-full">+ Novo anúncio</Link>
 
         {loading ? (
-          <p className="text-center text-sm text-slate-400">Carregando…</p>
+          <ul className="space-y-3">
+            {[0, 1, 2].map((i) => (
+              <li key={i} className="card p-3">
+                <div className="flex gap-3">
+                  <div className="skeleton h-16 w-20 rounded-lg" />
+                  <div className="flex-1 space-y-2">
+                    <div className="skeleton h-4 w-2/3" />
+                    <div className="skeleton h-3 w-1/2" />
+                    <div className="skeleton h-5 w-1/3" />
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-4 gap-2 border-t border-outline pt-3">
+                  <div className="skeleton h-8" />
+                  <div className="skeleton h-8" />
+                  <div className="skeleton h-8" />
+                  <div className="skeleton h-8" />
+                </div>
+              </li>
+            ))}
+          </ul>
         ) : items.length === 0 ? (
           <p className="rounded-xl border border-dashed border-outline bg-card p-6 text-center text-sm text-slate-400">
             Você ainda não tem anúncios.

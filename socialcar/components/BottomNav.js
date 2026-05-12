@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
@@ -14,38 +14,67 @@ const ITEMS = [
   { href: '/perfil', label: 'Perfil', icon: IconUser },
 ];
 
+const LAST_SEEN_KEY = 'chats_last_seen_at';
+
 export default function BottomNav() {
   const pathname = usePathname() || '/';
   const { appUser } = useAuth();
   const [unread, setUnread] = useState(0);
+  const pollFailedRef = useRef(false);
 
   const hidden = pathname.startsWith('/onboarding') || pathname.startsWith('/entrar') || pathname.startsWith('/cadastro');
 
   useEffect(() => {
+    if (pathname.startsWith('/chats')) {
+      try { localStorage.setItem(LAST_SEEN_KEY, String(Date.now())); } catch {}
+      setUnread(0);
+    }
+  }, [pathname]);
+
+  useEffect(() => {
     if (hidden || !appUser?.id) { setUnread(0); return; }
+    if (pollFailedRef.current) return;
+
     let cancel = false;
     let timer;
 
     async function refresh() {
+      if (pollFailedRef.current) return;
       const me = appUser.id;
-      const { data: chats } = await supabase
+
+      const { data: chats, error: chatsErr } = await supabase
         .from('chats')
-        .select('id, buyer_id, seller_id, last_read_buyer_at, last_read_seller_at')
+        .select('id, buyer_id, seller_id')
         .or(`buyer_id.eq.${me},seller_id.eq.${me}`);
+
+      if (chatsErr) {
+        pollFailedRef.current = true;
+        if (timer) clearInterval(timer);
+        if (!cancel) setUnread(0);
+        return;
+      }
       if (!chats?.length) { if (!cancel) setUnread(0); return; }
+
       const ids = chats.map((c) => c.id);
-      const { data: msgs } = await supabase
+      let lastSeen = 0;
+      try { lastSeen = Number(localStorage.getItem(LAST_SEEN_KEY) || 0); } catch {}
+
+      const { data: msgs, error: msgsErr } = await supabase
         .from('messages')
         .select('chat_id, sender_id, created_at')
         .in('chat_id', ids);
 
+      if (msgsErr) {
+        pollFailedRef.current = true;
+        if (timer) clearInterval(timer);
+        if (!cancel) setUnread(0);
+        return;
+      }
+
       let count = 0;
-      for (const c of chats) {
-        const lr = me === c.buyer_id ? c.last_read_buyer_at : c.last_read_seller_at;
-        const lrTs = lr ? new Date(lr).getTime() : 0;
-        for (const m of msgs || []) {
-          if (m.chat_id === c.id && m.sender_id !== me && new Date(m.created_at).getTime() > lrTs) count++;
-        }
+      for (const m of msgs || []) {
+        if (m.sender_id === me) continue;
+        if (new Date(m.created_at).getTime() > lastSeen) count++;
       }
       if (!cancel) setUnread(count);
     }
@@ -53,7 +82,7 @@ export default function BottomNav() {
     refresh();
     timer = setInterval(refresh, 30_000);
     return () => { cancel = true; clearInterval(timer); };
-  }, [hidden, appUser?.id, pathname]);
+  }, [hidden, appUser?.id]);
 
   if (hidden) return null;
 
