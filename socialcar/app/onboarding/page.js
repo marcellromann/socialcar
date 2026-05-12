@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import RequireAuth from '@/components/RequireAuth';
 import { useAuth } from '@/lib/auth';
@@ -8,16 +8,80 @@ import { supabase } from '@/lib/supabase';
 import { CATEGORIAS, FAIXAS_PRECO } from '@/lib/format';
 
 const STEPS = 4;
-const FIPE_BASE = 'https://parallelum.com.br/fipe/api/v1/carros/marcas';
-const FETCH_TIMEOUT_MS = 5000;
 
-const EMPTY_CARRO = {
-  marca: '',
-  modelo: '',
-  ano: '',
-  codigoMarca: '',
-  codigoModelo: '',
-};
+const MARCAS_FIPE = [
+  { codigo: '1', nome: 'Acura' },
+  { codigo: '2', nome: 'Agrale' },
+  { codigo: '3', nome: 'Alfa Romeo' },
+  { codigo: '4', nome: 'AM Gen' },
+  { codigo: '5', nome: 'Asia Motors' },
+  { codigo: '6', nome: 'Aston Martin' },
+  { codigo: '7', nome: 'Audi' },
+  { codigo: '8', nome: 'BMW' },
+  { codigo: '9', nome: 'BRM' },
+  { codigo: '10', nome: 'Buggy' },
+  { codigo: '11', nome: 'Bugre' },
+  { codigo: '12', nome: 'Cadillac' },
+  { codigo: '13', nome: 'CBT Jipe' },
+  { codigo: '14', nome: 'Chery' },
+  { codigo: '15', nome: 'Chevrolet' },
+  { codigo: '16', nome: 'Chrysler' },
+  { codigo: '17', nome: 'Citroën' },
+  { codigo: '18', nome: 'Cross Lander' },
+  { codigo: '19', nome: 'Daewoo' },
+  { codigo: '20', nome: 'Daihatsu' },
+  { codigo: '21', nome: 'Dodge' },
+  { codigo: '22', nome: 'Effa' },
+  { codigo: '23', nome: 'Emis' },
+  { codigo: '24', nome: 'Engesa' },
+  { codigo: '25', nome: 'Envemo' },
+  { codigo: '26', nome: 'Ferrari' },
+  { codigo: '27', nome: 'Fiat' },
+  { codigo: '28', nome: 'Fibravan' },
+  { codigo: '29', nome: 'Ford' },
+  { codigo: '30', nome: 'Fyber' },
+  { codigo: '31', nome: 'Geely' },
+  { codigo: '32', nome: 'GM' },
+  { codigo: '33', nome: 'Gurgel' },
+  { codigo: '34', nome: 'GWM' },
+  { codigo: '35', nome: 'Honda' },
+  { codigo: '36', nome: 'Hyundai' },
+  { codigo: '37', nome: 'Isuzu' },
+  { codigo: '38', nome: 'JAC' },
+  { codigo: '39', nome: 'Jaguar' },
+  { codigo: '40', nome: 'Jeep' },
+  { codigo: '41', nome: 'Kia' },
+  { codigo: '42', nome: 'Lada' },
+  { codigo: '43', nome: 'Lamborghini' },
+  { codigo: '44', nome: 'Land Rover' },
+  { codigo: '45', nome: 'Lexus' },
+  { codigo: '46', nome: 'Lifan' },
+  { codigo: '47', nome: 'Mahindra' },
+  { codigo: '48', nome: 'Maserati' },
+  { codigo: '49', nome: 'Mazda' },
+  { codigo: '50', nome: 'Mercedes-Benz' },
+  { codigo: '51', nome: 'Mitsubishi' },
+  { codigo: '52', nome: 'Nissan' },
+  { codigo: '53', nome: 'Peugeot' },
+  { codigo: '54', nome: 'Pontiac' },
+  { codigo: '55', nome: 'Porsche' },
+  { codigo: '56', nome: 'RAM' },
+  { codigo: '57', nome: 'Renault' },
+  { codigo: '58', nome: 'Rolls-Royce' },
+  { codigo: '59', nome: 'Seat' },
+  { codigo: '60', nome: 'Subaru' },
+  { codigo: '61', nome: 'Suzuki' },
+  { codigo: '62', nome: 'Toyota' },
+  { codigo: '63', nome: 'Troller' },
+  { codigo: '64', nome: 'Volkswagen' },
+  { codigo: '65', nome: 'Volvo' },
+];
+
+const EMPTY_CARRO = { marca: '', modelo: '', ano: '' };
+
+function capitalizeWords(s) {
+  return String(s || '').replace(/(^|\s)([a-zà-ÿ])/g, (_, sep, ch) => sep + ch.toUpperCase());
+}
 
 export default function OnboardingPage() {
   return (
@@ -40,10 +104,6 @@ function Inner() {
     categorias_buscadas: [],
     faixa_preco: '',
   });
-
-  const [marcas, setMarcas] = useState({ loading: false, list: [], failed: false });
-  const [modelos, setModelos] = useState({ loading: false, list: [], failed: false });
-  const [anos, setAnos] = useState({ loading: false, list: [], failed: false });
 
   useEffect(() => {
     let cancel = false;
@@ -74,8 +134,6 @@ function Inner() {
           marca: carroExistente.marca || '',
           modelo: carroExistente.modelo || '',
           ano: carroExistente.ano || '',
-          codigoMarca: carroExistente.codigoMarca || '',
-          codigoModelo: carroExistente.codigoModelo || '',
         },
         categorias_buscadas: existing.categorias_buscadas || [],
         faixa_preco: existing.faixa_preco || '',
@@ -84,96 +142,12 @@ function Inner() {
     return () => { cancel = true; };
   }, []);
 
-  // Step 2 — busca marcas quando entrar na etapa
-  useEffect(() => {
-    if (step !== 2 || data.tem_carro !== true) return;
-    if (marcas.list.length || marcas.loading || marcas.failed) return;
-
-    let cancel = false;
-    (async () => {
-      setMarcas({ loading: true, list: [], failed: false });
-      try {
-        const json = await fetchWithTimeout(FIPE_BASE, FETCH_TIMEOUT_MS);
-        if (cancel) return;
-        const sorted = (json || []).slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-        setMarcas({ loading: false, list: sorted, failed: false });
-      } catch {
-        if (!cancel) setMarcas({ loading: false, list: [], failed: true });
-      }
-    })();
-    return () => { cancel = true; };
-  }, [step, data.tem_carro, marcas.list.length, marcas.loading, marcas.failed]);
-
-  // Step 2 — busca modelos quando marca selecionada
-  useEffect(() => {
-    if (step !== 2 || data.tem_carro !== true) return;
-    const codigoMarca = data.carro_atual.codigoMarca;
-    if (!codigoMarca) {
-      setModelos({ loading: false, list: [], failed: false });
-      return;
-    }
-    let cancel = false;
-    (async () => {
-      setModelos({ loading: true, list: [], failed: false });
-      try {
-        const json = await fetchWithTimeout(
-          `${FIPE_BASE}/${codigoMarca}/modelos`,
-          FETCH_TIMEOUT_MS
-        );
-        if (cancel) return;
-        const list = (json?.modelos || []).slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-        setModelos({ loading: false, list, failed: false });
-      } catch {
-        if (!cancel) setModelos({ loading: false, list: [], failed: true });
-      }
-    })();
-    return () => { cancel = true; };
-  }, [step, data.tem_carro, data.carro_atual.codigoMarca]);
-
-  // Step 2 — busca anos quando modelo selecionado
-  useEffect(() => {
-    if (step !== 2 || data.tem_carro !== true) return;
-    const codigoMarca = data.carro_atual.codigoMarca;
-    const codigoModelo = data.carro_atual.codigoModelo;
-    if (!codigoMarca || !codigoModelo) {
-      setAnos({ loading: false, list: [], failed: false });
-      return;
-    }
-    let cancel = false;
-    (async () => {
-      setAnos({ loading: true, list: [], failed: false });
-      try {
-        const json = await fetchWithTimeout(
-          `${FIPE_BASE}/${codigoMarca}/modelos/${codigoModelo}/anos`,
-          FETCH_TIMEOUT_MS
-        );
-        if (cancel) return;
-        setAnos({ loading: false, list: json || [], failed: false });
-      } catch {
-        if (!cancel) setAnos({ loading: false, list: [], failed: true });
-      }
-    })();
-    return () => { cancel = true; };
-  }, [step, data.tem_carro, data.carro_atual.codigoMarca, data.carro_atual.codigoModelo]);
-
   function set(key, value) {
     setData((d) => ({ ...d, [key]: value }));
   }
 
   function setCarroField(patch) {
     setData((d) => ({ ...d, carro_atual: { ...d.carro_atual, ...patch } }));
-  }
-
-  function pickMarca(codigo, nome) {
-    setCarroField({ codigoMarca: codigo, marca: nome, codigoModelo: '', modelo: '', ano: '' });
-  }
-
-  function pickModelo(codigo, nome) {
-    setCarroField({ codigoModelo: codigo, modelo: nome, ano: '' });
-  }
-
-  function pickAno(nome) {
-    setCarroField({ ano: nome });
   }
 
   function toggleCategoria(id) {
@@ -214,13 +188,7 @@ function Inner() {
 
       const c = data.carro_atual;
       const carroAtual = data.tem_carro && (c.marca || c.modelo)
-        ? {
-            marca: c.marca || '',
-            modelo: c.modelo || '',
-            ano: c.ano || '',
-            codigoMarca: c.codigoMarca || '',
-            codigoModelo: c.codigoModelo || '',
-          }
+        ? { marca: c.marca || '', modelo: c.modelo || '', ano: c.ano || '' }
         : null;
 
       const payload = {
@@ -312,110 +280,41 @@ function Inner() {
         {step === 2 && (
           <Question label="Qual é o seu veículo?">
             <div className="space-y-3">
-              {/* Marca */}
-              <FipeField label="Selecionar marca">
-                {marcas.failed ? (
-                  <input
-                    className="input"
-                    type="text"
-                    placeholder="Digite a marca"
-                    value={data.carro_atual.marca}
-                    onChange={(e) => setCarroField({
-                      marca: e.target.value,
-                      codigoMarca: '',
-                      modelo: '',
-                      codigoModelo: '',
-                      ano: '',
-                    })}
-                  />
-                ) : (
-                  <select
-                    className="input"
-                    value={data.carro_atual.codigoMarca}
-                    onChange={(e) => {
-                      const codigo = e.target.value;
-                      const item = marcas.list.find((m) => m.codigo === codigo);
-                      if (codigo && item) pickMarca(codigo, item.nome);
-                      else pickMarca('', '');
-                    }}
-                    disabled={marcas.loading}
-                  >
-                    <option value="">
-                      {marcas.loading ? 'Carregando…' : 'Selecionar marca'}
-                    </option>
-                    {marcas.list.map((m) => (
-                      <option key={m.codigo} value={m.codigo}>{m.nome}</option>
-                    ))}
-                  </select>
-                )}
-              </FipeField>
+              <Field label="Marca">
+                <select
+                  className="input"
+                  value={data.carro_atual.marca}
+                  onChange={(e) => setCarroField({ marca: e.target.value })}
+                >
+                  <option value="">Selecionar marca</option>
+                  {MARCAS_FIPE.map((m) => (
+                    <option key={m.codigo} value={m.nome}>{m.nome}</option>
+                  ))}
+                </select>
+              </Field>
 
-              {/* Modelo */}
-              {(data.carro_atual.codigoMarca || (marcas.failed && data.carro_atual.marca)) && (
-                <FipeField label="Selecionar modelo">
-                  {modelos.failed || marcas.failed ? (
-                    <input
-                      className="input"
-                      type="text"
-                      placeholder="Digite o modelo"
-                      value={data.carro_atual.modelo}
-                      onChange={(e) => setCarroField({
-                        modelo: e.target.value,
-                        codigoModelo: '',
-                        ano: '',
-                      })}
-                    />
-                  ) : (
-                    <select
-                      className="input"
-                      value={data.carro_atual.codigoModelo}
-                      onChange={(e) => {
-                        const codigo = e.target.value;
-                        const item = modelos.list.find((m) => String(m.codigo) === codigo);
-                        if (codigo && item) pickModelo(codigo, item.nome);
-                        else pickModelo('', '');
-                      }}
-                      disabled={modelos.loading}
-                    >
-                      <option value="">
-                        {modelos.loading ? 'Carregando…' : 'Selecionar modelo'}
-                      </option>
-                      {modelos.list.map((m) => (
-                        <option key={m.codigo} value={m.codigo}>{m.nome}</option>
-                      ))}
-                    </select>
-                  )}
-                </FipeField>
-              )}
+              <Field label="Modelo">
+                <input
+                  className="input"
+                  type="text"
+                  placeholder="Ex: Corolla, Civic, Onix"
+                  value={data.carro_atual.modelo}
+                  onChange={(e) => setCarroField({ modelo: capitalizeWords(e.target.value) })}
+                />
+              </Field>
 
-              {/* Ano */}
-              {(data.carro_atual.codigoModelo || (modelos.failed && data.carro_atual.modelo)) && (
-                <FipeField label="Selecionar ano">
-                  {anos.failed || modelos.failed || marcas.failed ? (
-                    <input
-                      className="input"
-                      type="number"
-                      placeholder="Digite o ano"
-                      value={data.carro_atual.ano}
-                      onChange={(e) => setCarroField({ ano: e.target.value })}
-                    />
-                  ) : (
-                    <select
-                      className="input"
-                      value={data.carro_atual.ano}
-                      onChange={(e) => pickAno(e.target.value)}
-                      disabled={anos.loading}
-                    >
-                      <option value="">
-                        {anos.loading ? 'Carregando…' : 'Selecionar ano'}
-                      </option>
-                      {anos.list.map((a) => (
-                        <option key={a.codigo} value={a.nome}>{a.nome}</option>
-                      ))}
-                    </select>
-                  )}
-                </FipeField>
-              )}
+              <Field label="Ano">
+                <input
+                  className="input"
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="Ex: 2022"
+                  min={1960}
+                  max={2026}
+                  value={data.carro_atual.ano}
+                  onChange={(e) => setCarroField({ ano: e.target.value })}
+                />
+              </Field>
             </div>
           </Question>
         )}
@@ -475,19 +374,7 @@ function Inner() {
   );
 }
 
-async function fetchWithTimeout(url, ms) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), ms);
-  try {
-    const res = await fetch(url, { signal: ctrl.signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-function FipeField({ label, children }) {
+function Field({ label, children }) {
   return (
     <label className="block">
       <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-slate-400">{label}</span>
