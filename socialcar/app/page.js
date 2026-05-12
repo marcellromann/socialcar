@@ -43,7 +43,7 @@ export default async function HomePage() {
 
   return (
     <>
-      <TopBar title="Feed" />
+      <TopBar title="Início" />
       <Feed initialListings={listings} />
     </>
   );

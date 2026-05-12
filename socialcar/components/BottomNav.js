@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
 const ITEMS = [
-  { href: '/', label: 'Feed', icon: IconFlame },
+  { href: '/', label: 'Início', icon: IconFlame },
   { href: '/buscar', label: 'Buscar', icon: IconSearch },
   { href: '/anunciar', label: 'Anunciar', icon: IconPlus, primary: true },
   { href: '/chats', label: 'Chats', icon: IconChat, key: 'chats' },

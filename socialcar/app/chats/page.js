@@ -98,7 +98,7 @@ function Inner() {
         ) : rows.length === 0 ? (
           <div className="grid place-items-center rounded-2xl border border-dashed border-outline bg-card p-10 text-center">
             <p className="text-sm text-slate-400">Nenhuma conversa ainda. Dê interesse em um anúncio para começar.</p>
-            <Link href="/" className="btn-primary mt-4">Ir para o feed</Link>
+            <Link href="/" className="btn-primary mt-4">Ir para o início</Link>
           </div>
         ) : (
           <ul className="space-y-2">

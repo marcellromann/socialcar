@@ -137,7 +137,7 @@ export default async function ListingDetailPage({ params }) {
             Tenho interesse — Iniciar conversa
           </Link>
           <Link href="/" className="btn-secondary w-full">
-            Voltar ao feed
+            Voltar ao início
           </Link>
         </div>
       </div>
