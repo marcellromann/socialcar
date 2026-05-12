@@ -77,6 +77,44 @@ const MARCAS_FIPE = [
   { codigo: '65', nome: 'Volvo' },
 ];
 
+const MODELOS_POR_MARCA = {
+  'Audi': ['A1', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'Q2', 'Q3', 'Q5', 'Q7', 'Q8', 'TT', 'R8', 'e-tron'],
+  'BMW': ['116i', '118i', '120i', '125i', '130i', 'M2', 'M3', 'M4', '320i', '328i', '330i', 'X1', 'X2', 'X3', 'X4', 'X5', 'X6', 'X7', 'Z4', 'i3', 'i4', 'iX'],
+  'Chevrolet': ['Onix', 'Onix Plus', 'Tracker', 'Cruze', 'Equinox', 'Blazer', 'S10', 'Montana', 'Spin', 'Cobalt', 'Prisma', 'Celta', 'Corsa', 'Vectra', 'Captiva', 'Trailblazer', 'Traverse', 'Silverado'],
+  'Citroën': ['C3', 'C4', 'C4 Cactus', 'C5 Aircross', 'Aircross', 'Berlingo', 'Jumpy', 'C3 Aircross'],
+  'Fiat': ['Argo', 'Cronos', 'Pulse', 'Fastback', 'Strada', 'Toro', 'Ducato', 'Mobi', 'Uno', 'Palio', 'Siena', 'Bravo', 'Linea', 'Doblò', 'Freemont', '500'],
+  'Ford': ['Ka', 'EcoSport', 'Ranger', 'Territory', 'Bronco Sport', 'Maverick', 'Edge', 'Explorer', 'F-150', 'Mustang', 'Fusion', 'Focus', 'Fiesta', 'Transit'],
+  'Honda': ['Civic', 'City', 'Fit', 'HR-V', 'CR-V', 'WR-V', 'Accord', 'ZR-V', 'e:NS1', 'Pilot'],
+  'Hyundai': ['HB20', 'HB20S', 'Creta', 'Tucson', 'Santa Fe', 'Sonata', 'Elantra', 'i30', 'ix35', 'Azera', 'Kona'],
+  'Jeep': ['Renegade', 'Compass', 'Commander', 'Wrangler', 'Gladiator', 'Grand Cherokee', 'Cherokee'],
+  'Kia': ['Sportage', 'Stinger', 'Sorento', 'Carnival', 'EV6', 'Soul', 'Cerato', 'Picanto', 'Niro', 'Telluride'],
+  'Land Rover': ['Defender', 'Discovery', 'Discovery Sport', 'Range Rover', 'Range Rover Sport', 'Range Rover Velar', 'Range Rover Evoque', 'Freelander'],
+  'Mercedes-Benz': ['A 180', 'A 200', 'A 250', 'C 180', 'C 200', 'C 300', 'E 200', 'E 300', 'GLA', 'GLB', 'GLC', 'GLE', 'GLS', 'CLA', 'AMG GT', 'EQC', 'EQS', 'Sprinter'],
+  'Mitsubishi': ['ASX', 'Eclipse Cross', 'Outlander', 'Pajero', 'Pajero Sport', 'L200 Triton', 'Lancer'],
+  'Nissan': ['Versa', 'Kicks', 'Frontier', 'Sentra', 'Altima', 'Leaf', 'Murano', 'Pathfinder', 'X-Trail'],
+  'Peugeot': ['208', '2008', '308', '3008', '408', '508', '5008', 'Expert', 'Boxer'],
+  'Porsche': ['Cayenne', 'Macan', '911', 'Panamera', 'Taycan', '718'],
+  'Renault': ['Kwid', 'Sandero', 'Logan', 'Duster', 'Captur', 'Oroch', 'Jogger', 'Zoe', 'Arkana', 'Master'],
+  'Toyota': ['Corolla', 'Corolla Cross', 'Yaris', 'Hilux', 'SW4', 'RAV4', 'Camry', 'Prius', 'C-HR', 'GR86', 'Land Cruiser', 'Etios'],
+  'Volkswagen': ['Gol', 'Polo', 'Virtus', 'Nivus', 'T-Cross', 'Taos', 'Amarok', 'Saveiro', 'Voyage', 'Fox', 'Golf', 'Jetta', 'Tiguan', 'Touareg', 'ID.4', 'ID.6'],
+  'Volvo': ['XC40', 'XC60', 'XC90', 'S60', 'S90', 'V60', 'V90', 'C40'],
+  'Subaru': ['Impreza', 'Legacy', 'Forester', 'Outback', 'XV', 'BRZ', 'WRX'],
+  'Suzuki': ['Jimny', 'Swift', 'Vitara', 'S-Cross', 'Baleno'],
+  'Mazda': ['Mazda2', 'Mazda3', 'Mazda6', 'CX-3', 'CX-5', 'CX-30', 'CX-9', 'MX-5'],
+  'Jaguar': ['XE', 'XF', 'XJ', 'E-Pace', 'F-Pace', 'I-Pace', 'F-Type'],
+  'Lexus': ['IS', 'ES', 'GS', 'LS', 'UX', 'NX', 'RX', 'GX', 'LX'],
+  'Ferrari': ['Roma', 'Portofino', 'SF90', 'F8', '812', '296', 'Purosangue'],
+  'Lamborghini': ['Huracán', 'Urus', 'Aventador', 'Revuelto'],
+  'Maserati': ['Ghibli', 'Quattroporte', 'Levante', 'GranTurismo', 'Grecale'],
+  'RAM': ['700', '1500', '2500', '3500'],
+  'GWM': ['Haval H6', 'Haval H2', 'Ora Good Cat', 'Tank 300', 'Poer'],
+  'JAC': ['J3', 'J5', 'J6', 'T40', 'T50', 'T60', 'T80', 'E-JS1'],
+  'Chery': ['Tiggo 2', 'Tiggo 5x', 'Tiggo 7', 'Tiggo 8', 'Arrizo 6'],
+  'Geely': ['Coolray', 'Geometry C', 'Emgrand'],
+};
+
+const MODELO_OUTRO = '__outro__';
+
 const EMPTY_CARRO = { marca: '', modelo: '', ano: '' };
 
 function capitalizeWords(s) {
@@ -104,6 +142,7 @@ function Inner() {
     categorias_buscadas: [],
     faixa_preco: '',
   });
+  const [modeloCustom, setModeloCustom] = useState(false);
 
   useEffect(() => {
     let cancel = false;
@@ -128,11 +167,17 @@ function Inner() {
       if (!existing || cancel) return;
 
       const carroExistente = existing.carro_atual || {};
+      const marca = carroExistente.marca || '';
+      const modelo = carroExistente.modelo || '';
+      const knownModels = MODELOS_POR_MARCA[marca];
+      if (marca && modelo && knownModels && !knownModels.includes(modelo)) {
+        setModeloCustom(true);
+      }
       setData({
         tem_carro: existing.tem_carro,
         carro_atual: {
-          marca: carroExistente.marca || '',
-          modelo: carroExistente.modelo || '',
+          marca,
+          modelo,
           ano: carroExistente.ano || '',
         },
         categorias_buscadas: existing.categorias_buscadas || [],
@@ -284,7 +329,10 @@ function Inner() {
                 <select
                   className="input"
                   value={data.carro_atual.marca}
-                  onChange={(e) => setCarroField({ marca: e.target.value })}
+                  onChange={(e) => {
+                    setCarroField({ marca: e.target.value, modelo: '' });
+                    setModeloCustom(false);
+                  }}
                 >
                   <option value="">Selecionar marca</option>
                   {MARCAS_FIPE.map((m) => (
@@ -294,12 +342,22 @@ function Inner() {
               </Field>
 
               <Field label="Modelo">
-                <input
-                  className="input"
-                  type="text"
-                  placeholder="Ex: Corolla, Civic, Onix"
-                  value={data.carro_atual.modelo}
-                  onChange={(e) => setCarroField({ modelo: capitalizeWords(e.target.value) })}
+                <ModeloInput
+                  marca={data.carro_atual.marca}
+                  modelo={data.carro_atual.modelo}
+                  modeloCustom={modeloCustom}
+                  onPickFromList={(value) => {
+                    if (value === MODELO_OUTRO) {
+                      setModeloCustom(true);
+                      setCarroField({ modelo: '' });
+                    } else {
+                      setModeloCustom(false);
+                      setCarroField({ modelo: value });
+                    }
+                  }}
+                  onTypeCustom={(value) =>
+                    setCarroField({ modelo: capitalizeWords(value) })
+                  }
                 />
               </Field>
 
@@ -371,6 +429,49 @@ function Inner() {
         )}
       </footer>
     </main>
+  );
+}
+
+function ModeloInput({ marca, modelo, modeloCustom, onPickFromList, onTypeCustom }) {
+  if (!marca) {
+    return (
+      <input
+        className="input"
+        type="text"
+        placeholder="Selecione a marca primeiro"
+        value=""
+        disabled
+        readOnly
+      />
+    );
+  }
+
+  const knownModels = MODELOS_POR_MARCA[marca];
+
+  if (!knownModels || modeloCustom) {
+    return (
+      <input
+        className="input"
+        type="text"
+        placeholder="Ex: Corolla, Civic, Onix"
+        value={modelo}
+        onChange={(e) => onTypeCustom(e.target.value)}
+      />
+    );
+  }
+
+  return (
+    <select
+      className="input"
+      value={modelo}
+      onChange={(e) => onPickFromList(e.target.value)}
+    >
+      <option value="">Selecionar modelo</option>
+      {knownModels.map((m) => (
+        <option key={m} value={m}>{m}</option>
+      ))}
+      <option value={MODELO_OUTRO}>Outro modelo</option>
+    </select>
   );
 }
 
