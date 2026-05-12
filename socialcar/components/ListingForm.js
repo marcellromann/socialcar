@@ -5,6 +5,14 @@ import { useRouter } from 'next/navigation';
 import { PHOTOS_BUCKET, supabase } from '@/lib/supabase';
 import { hashPlate, isValidPlate, maskPlate, normalizePlate } from '@/lib/plate';
 import { useAuth } from '@/lib/auth';
+import {
+  MARCAS_FIPE,
+  MODELOS_POR_MARCA,
+  MOTORIZACOES_COMUNS,
+  MARCA_OUTRA,
+  MODELO_OUTRO,
+  MOTORIZACAO_OUTRA,
+} from '@/lib/marcas';
 
 const MAX_PHOTOS = 15;
 const MIN_PHOTOS = 3;
@@ -147,6 +155,9 @@ export default function ListingForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [plateState, setPlateState] = useState({ status: 'idle', message: '' });
+  const [marcaCustom, setMarcaCustom] = useState(false);
+  const [modeloCustom, setModeloCustom] = useState(false);
+  const [motorizacaoCustom, setMotorizacaoCustom] = useState(false);
 
   const previews = useMemo(
     () => files.map((f) => ({ name: f.name, url: URL.createObjectURL(f) })),
@@ -170,6 +181,43 @@ export default function ListingForm() {
       if (max) digits = digits.slice(0, max);
       setForm((f) => ({ ...f, [field]: digits }));
     };
+  }
+
+  function setFields(patch) {
+    setForm((f) => ({ ...f, ...patch }));
+  }
+
+  function handleMarcaSelect(value) {
+    if (value === MARCA_OUTRA) {
+      setMarcaCustom(true);
+      setModeloCustom(false);
+      setMotorizacaoCustom(false);
+      setFields({ marca: '', modelo: '', motorizacao: '' });
+      return;
+    }
+    setMarcaCustom(false);
+    setModeloCustom(false);
+    setFields({ marca: value, modelo: '' });
+  }
+
+  function handleModeloSelect(value) {
+    if (value === MODELO_OUTRO) {
+      setModeloCustom(true);
+      setFields({ modelo: '' });
+      return;
+    }
+    setModeloCustom(false);
+    setFields({ modelo: value });
+  }
+
+  function handleMotorizacaoSelect(value) {
+    if (value === MOTORIZACAO_OUTRA) {
+      setMotorizacaoCustom(true);
+      setFields({ motorizacao: '' });
+      return;
+    }
+    setMotorizacaoCustom(false);
+    setFields({ motorizacao: value });
   }
 
   // ─── Step 1: validação em tempo real da placa ──────────────────────────────
@@ -393,6 +441,26 @@ export default function ListingForm() {
           updateCap={updateCap}
           updateDigits={updateDigits}
           fieldErrors={fieldErrors}
+          marcaCustom={marcaCustom}
+          modeloCustom={modeloCustom}
+          motorizacaoCustom={motorizacaoCustom}
+          onMarcaSelect={handleMarcaSelect}
+          onModeloSelect={handleModeloSelect}
+          onMotorizacaoSelect={handleMotorizacaoSelect}
+          onResetMarca={() => {
+            setMarcaCustom(false);
+            setModeloCustom(false);
+            setMotorizacaoCustom(false);
+            setFields({ marca: '', modelo: '', motorizacao: '' });
+          }}
+          onResetModelo={() => {
+            setModeloCustom(false);
+            setFields({ modelo: '' });
+          }}
+          onResetMotorizacao={() => {
+            setMotorizacaoCustom(false);
+            setFields({ motorizacao: '' });
+          }}
         />
       )}
 
@@ -537,13 +605,31 @@ function Step1Plate({ placa, onChange, formatErro, plateState }) {
 }
 
 // ─── Step 2 ──────────────────────────────────────────────────────────────────
-function Step2Vehicle({ form, update, updateCap, updateDigits, fieldErrors }) {
+function Step2Vehicle({
+  form,
+  update,
+  updateCap,
+  updateDigits,
+  fieldErrors,
+  marcaCustom,
+  modeloCustom,
+  motorizacaoCustom,
+  onMarcaSelect,
+  onModeloSelect,
+  onMotorizacaoSelect,
+  onResetMarca,
+  onResetModelo,
+  onResetMotorizacao,
+}) {
   const precoFormatado = form.preco
     ? `R$ ${Number(form.preco).toLocaleString('pt-BR')}`
     : '';
 
   const v = (field) => isFieldValid(form, field);
   const e = (field) => fieldErrors[field];
+
+  const knownModels = MODELOS_POR_MARCA[form.marca];
+  const marcaSelectValue = marcaCustom ? MARCA_OUTRA : form.marca;
 
   return (
     <section className="card space-y-4 p-4">
@@ -553,33 +639,111 @@ function Step2Vehicle({ form, update, updateCap, updateDigits, fieldErrors }) {
       </header>
 
       <Field label="Marca" error={e('marca')}>
-        <input
-          className={inputCls({ error: e('marca'), valid: v('marca') })}
-          value={form.marca}
-          onChange={updateCap('marca')}
-          placeholder="Ex: Volkswagen, Toyota, Fiat"
-          required
-        />
+        {marcaCustom ? (
+          <div className="space-y-2">
+            <input
+              className={inputCls({ error: e('marca'), valid: v('marca') })}
+              value={form.marca}
+              onChange={updateCap('marca')}
+              placeholder="Digite a marca do seu veículo"
+              required
+            />
+            <button
+              type="button"
+              onClick={onResetMarca}
+              className="text-[11px] font-bold uppercase tracking-wide text-brand-500 active:opacity-80"
+            >
+              ← Voltar
+            </button>
+          </div>
+        ) : (
+          <select
+            className={inputCls({ error: e('marca'), valid: v('marca') })}
+            value={marcaSelectValue}
+            onChange={(ev) => onMarcaSelect(ev.target.value)}
+            required
+          >
+            <option value="">Selecionar marca</option>
+            {MARCAS_FIPE.map((m) => (
+              <option key={m.codigo} value={m.nome}>{m.nome}</option>
+            ))}
+            <option value={MARCA_OUTRA}>Outra marca</option>
+          </select>
+        )}
       </Field>
 
       <Field label="Modelo" error={e('modelo')}>
-        <input
-          className={inputCls({ error: e('modelo'), valid: v('modelo') })}
-          value={form.modelo}
-          onChange={updateCap('modelo')}
-          placeholder="Ex: Polo, Corolla, Argo"
-          required
-        />
+        {marcaCustom || !knownModels || modeloCustom ? (
+          <div className="space-y-2">
+            <input
+              className={inputCls({ error: e('modelo'), valid: v('modelo') })}
+              value={form.modelo}
+              onChange={updateCap('modelo')}
+              placeholder={form.marca ? 'Ex: Corolla, Civic, Onix' : 'Selecione a marca primeiro'}
+              disabled={!marcaCustom && !form.marca}
+              required
+            />
+            {knownModels && modeloCustom && (
+              <button
+                type="button"
+                onClick={onResetModelo}
+                className="text-[11px] font-bold uppercase tracking-wide text-brand-500 active:opacity-80"
+              >
+                ← Voltar
+              </button>
+            )}
+          </div>
+        ) : (
+          <select
+            className={inputCls({ error: e('modelo'), valid: v('modelo') })}
+            value={form.modelo}
+            onChange={(ev) => onModeloSelect(ev.target.value)}
+            required
+          >
+            <option value="">Selecionar modelo</option>
+            {knownModels.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+            <option value={MODELO_OUTRO}>Outro modelo</option>
+          </select>
+        )}
       </Field>
 
       <Field label="Motorização" error={e('motorizacao')}>
-        <input
-          className={inputCls({ error: e('motorizacao'), valid: v('motorizacao') })}
-          value={form.motorizacao}
-          onChange={updateCap('motorizacao')}
-          placeholder="Ex: 1.0 TSI, 2.0 Flex, 1.6 16V"
-          required
-        />
+        {motorizacaoCustom ? (
+          <div className="space-y-2">
+            <input
+              className={inputCls({ error: e('motorizacao'), valid: v('motorizacao') })}
+              value={form.motorizacao}
+              onChange={updateCap('motorizacao')}
+              placeholder="Ex: 1.0 TSI, 2.0 Flex, 1.6 16V"
+              required
+            />
+            <button
+              type="button"
+              onClick={onResetMotorizacao}
+              className="text-[11px] font-bold uppercase tracking-wide text-brand-500 active:opacity-80"
+            >
+              ← Voltar
+            </button>
+          </div>
+        ) : (
+          <select
+            className={inputCls({ error: e('motorizacao'), valid: v('motorizacao') })}
+            value={form.motorizacao}
+            onChange={(ev) => onMotorizacaoSelect(ev.target.value)}
+            disabled={!form.modelo}
+            required
+          >
+            <option value="">
+              {form.modelo ? 'Selecionar motorização' : 'Selecione o modelo primeiro'}
+            </option>
+            {MOTORIZACOES_COMUNS.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+            <option value={MOTORIZACAO_OUTRA}>Outra motorização</option>
+          </select>
+        )}
       </Field>
 
       <Field label="Versão">
