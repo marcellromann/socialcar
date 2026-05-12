@@ -7,6 +7,7 @@ import TopBar from '@/components/TopBar';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { summarizeBuyer } from '@/lib/format';
+import { isOnline, presenceLabel } from '@/lib/presence';
 
 export default function PerfilPage() {
   return (
@@ -45,7 +46,8 @@ function Inner() {
   const displayName = appUser?.nome || user?.email || 'Usuário';
   const initial = (displayName || 'S').charAt(0).toUpperCase();
   const memberSince = appUser?.created_at ? formatMemberSince(appUser.created_at) : null;
-  const status = appUser?.status === 'ausente' ? 'ausente' : 'online';
+  const online = isOnline(appUser?.last_seen_at);
+  const lastSeenText = presenceLabel(appUser?.last_seen_at);
 
   return (
     <>
@@ -67,7 +69,7 @@ function Inner() {
             <p className="truncate text-lg font-bold">{displayName}</p>
             <p className="truncate text-xs text-slate-400">{user?.email}</p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
-              <StatusBadge status={status} />
+              <StatusBadge online={online} label={lastSeenText} />
             </div>
             {memberSince && (
               <p className="mt-1 text-[11px] text-slate-400">Membro desde {memberSince}</p>
@@ -120,18 +122,17 @@ function Inner() {
   );
 }
 
-function StatusBadge({ status }) {
-  const isOnline = status === 'online';
+function StatusBadge({ online, label }) {
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${
-        isOnline
+        online
           ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
           : 'bg-slate-500/20 text-slate-300 border border-slate-500/40'
       }`}
     >
-      <span className={`h-2 w-2 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-slate-400'}`} />
-      {isOnline ? 'Online' : 'Ausente'}
+      <span className={`h-2 w-2 rounded-full ${online ? 'bg-emerald-400' : 'bg-slate-400'}`} />
+      {label}
     </span>
   );
 }

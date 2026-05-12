@@ -59,6 +59,7 @@ alter table public.users add column if not exists bairro           text;
 alter table public.users add column if not exists cidade           text;
 alter table public.users add column if not exists estado_endereco  text;
 alter table public.users add column if not exists status           text not null default 'online';
+alter table public.users add column if not exists last_seen_at     timestamptz default now();
 
 do $$ begin
   alter table public.users add constraint users_status_check

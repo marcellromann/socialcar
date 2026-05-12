@@ -29,10 +29,10 @@ async function fetchFeed() {
   if (sellerIds.length) {
     const { data: sellers } = await supabase
       .from('users')
-      .select('id, status')
+      .select('id, last_seen_at')
       .in('id', sellerIds);
-    const byId = new Map((sellers || []).map((s) => [s.id, s.status]));
-    listings = listings.map((l) => ({ ...l, seller_status: byId.get(l.user_id) || 'online' }));
+    const byId = new Map((sellers || []).map((s) => [s.id, s.last_seen_at]));
+    listings = listings.map((l) => ({ ...l, seller_last_seen_at: byId.get(l.user_id) || null }));
   }
 
   return listings;

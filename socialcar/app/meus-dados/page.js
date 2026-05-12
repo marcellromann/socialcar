@@ -40,9 +40,6 @@ function Inner() {
   const [cepLoading, setCepLoading] = useState(false);
   const [cepError, setCepError] = useState('');
 
-  const [status, setStatus] = useState('online');
-  const [statusBusy, setStatusBusy] = useState(false);
-
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarError, setAvatarError] = useState('');
   const [avatarSuccess, setAvatarSuccess] = useState('');
@@ -60,7 +57,6 @@ function Inner() {
       cidade: appUser?.cidade || '',
       estado_endereco: appUser?.estado_endereco || '',
     });
-    setStatus(appUser?.status === 'ausente' ? 'ausente' : 'online');
   }, [
     appUser?.nome,
     appUser?.telefone,
@@ -71,7 +67,6 @@ function Inner() {
     appUser?.bairro,
     appUser?.cidade,
     appUser?.estado_endereco,
-    appUser?.status,
     user?.email,
   ]);
 
@@ -105,23 +100,6 @@ function Inner() {
     const masked = formatCep(raw);
     setForm((f) => ({ ...f, cep: masked }));
     if (onlyDigits(masked).length === 8) lookupCep(masked);
-  }
-
-  async function changeStatus(next) {
-    if (!appUser?.id || next === status || statusBusy) return;
-    setStatusBusy(true);
-    const prev = status;
-    setStatus(next);
-    const { error } = await supabase
-      .from('users')
-      .update({ status: next })
-      .eq('id', appUser.id);
-    setStatusBusy(false);
-    if (error) {
-      setStatus(prev);
-      return;
-    }
-    refresh();
   }
 
   async function saveAll() {
@@ -308,29 +286,6 @@ function Inner() {
         {avatarError && <p className="text-xs text-red-400">{avatarError}</p>}
         {avatarSuccess && <p className="text-xs text-emerald-400">{avatarSuccess}</p>}
 
-        {/* Status */}
-        <div className="card p-3">
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">
-            Como você quer aparecer agora?
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <StatusButton
-              active={status === 'online'}
-              onClick={() => changeStatus('online')}
-              disabled={statusBusy}
-              dotClass="bg-emerald-400"
-              label="Online"
-            />
-            <StatusButton
-              active={status === 'ausente'}
-              onClick={() => changeStatus('ausente')}
-              disabled={statusBusy}
-              dotClass="bg-slate-500"
-              label="Ausente"
-            />
-          </div>
-        </div>
-
         {/* Dados pessoais */}
         <section className="card p-4">
           <header className="mb-3">
@@ -475,24 +430,6 @@ function Inner() {
         </button>
       </div>
     </>
-  );
-}
-
-function StatusButton({ active, onClick, disabled, dotClass, label }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold uppercase tracking-wide transition active:scale-[0.98] disabled:opacity-60 ${
-        active
-          ? 'border-brand-500 bg-brand-500/10 text-brand-500'
-          : 'border-outline bg-elevated text-slate-300'
-      }`}
-    >
-      <span className={`h-2.5 w-2.5 rounded-full ${dotClass}`} />
-      {label}
-    </button>
   );
 }
 

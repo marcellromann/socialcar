@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { buyerAlias, computeMatch } from '@/lib/anon';
 import { formatPrice, summarizeBuyer } from '@/lib/format';
+import { isOnline, presenceLabel } from '@/lib/presence';
 
 export default function ChatPage() {
   return (
@@ -26,6 +27,7 @@ function Inner() {
   const [chat, setChat] = useState(null);
   const [listing, setListing] = useState(null);
   const [buyerProfile, setBuyerProfile] = useState(null);
+  const [otherPresence, setOtherPresence] = useState(null);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -49,6 +51,18 @@ function Inner() {
         const { data: bp } = await supabase
           .from('buyer_profiles').select('*').eq('user_id', c.buyer_id).maybeSingle();
         setBuyerProfile(bp);
+      }
+
+      if (c && me) {
+        const otherId = me === c.buyer_id ? c.seller_id : c.buyer_id;
+        if (otherId) {
+          const { data: peer } = await supabase
+            .from('users')
+            .select('last_seen_at')
+            .eq('id', otherId)
+            .maybeSingle();
+          if (!cancel) setOtherPresence(peer?.last_seen_at || null);
+        }
       }
 
       const { data: msgs } = await supabase
@@ -97,6 +111,18 @@ function Inner() {
         back
       />
       <div className="page-pad flex flex-col gap-3">
+        {otherPresence !== null && (
+          <div className="flex items-center justify-end gap-2 text-[11px]">
+            <span
+              className={`h-2 w-2 rounded-full ${
+                isOnline(otherPresence) ? 'bg-emerald-400' : 'bg-slate-500'
+              }`}
+            />
+            <span className={isOnline(otherPresence) ? 'text-emerald-300' : 'text-slate-400'}>
+              {presenceLabel(otherPresence)}
+            </span>
+          </div>
+        )}
         {listing && (
           <Link
             href={`/anuncio/${listing.id}`}

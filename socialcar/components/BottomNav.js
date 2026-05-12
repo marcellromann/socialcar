@@ -18,7 +18,7 @@ const LAST_SEEN_KEY = 'chats_last_seen_at';
 
 export default function BottomNav() {
   const pathname = usePathname() || '/';
-  const { appUser } = useAuth();
+  const { appUser, updateLastSeen } = useAuth();
   const [unread, setUnread] = useState(0);
   const pollFailedRef = useRef(false);
 
@@ -30,6 +30,11 @@ export default function BottomNav() {
       setUnread(0);
     }
   }, [pathname]);
+
+  useEffect(() => {
+    if (!appUser?.id) return;
+    updateLastSeen?.();
+  }, [pathname, appUser?.id, updateLastSeen]);
 
   useEffect(() => {
     if (hidden || !appUser?.id) { setUnread(0); return; }

@@ -2,13 +2,14 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { formatKm, formatPrice, simulatePayment } from '@/lib/format';
+import { isOnline, presenceLabel } from '@/lib/presence';
 import Gallery from '@/components/Gallery';
 import TopBar from '@/components/TopBar';
 
 export const revalidate = 0;
 
 const FIELDS =
-  'id, marca, modelo, ano, versao, km, preco, combustivel, cambio, cor, descricao, acessorios, cidade, estado, foto_principal_url, verificado, created_at';
+  'id, user_id, marca, modelo, ano, versao, km, preco, combustivel, cambio, cor, descricao, acessorios, cidade, estado, foto_principal_url, verificado, created_at';
 
 async function fetchListing(id) {
   const { data, error } = await supabase
@@ -32,12 +33,24 @@ async function fetchPhotos(id) {
   return (data || []).map((p) => p.url);
 }
 
+async function fetchSeller(userId) {
+  if (!userId) return null;
+  const { data } = await supabase
+    .from('users')
+    .select('id, nome, last_seen_at')
+    .eq('id', userId)
+    .maybeSingle();
+  return data;
+}
+
 export default async function ListingDetailPage({ params }) {
   const [listing, photos] = await Promise.all([
     fetchListing(params.id),
     fetchPhotos(params.id),
   ]);
   if (!listing) notFound();
+  const seller = await fetchSeller(listing.user_id);
+  const sellerOnline = isOnline(seller?.last_seen_at);
   const sim = simulatePayment(listing.preco);
 
   return (
@@ -96,6 +109,25 @@ export default async function ListingDetailPage({ params }) {
             </p>
           )}
         </div>
+
+        {seller && (
+          <div className="card flex items-center justify-between p-3">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Vendedor</p>
+              <p className="mt-0.5 text-sm font-semibold text-white">{seller.nome || 'Vendedor'}</p>
+            </div>
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${
+                sellerOnline
+                  ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                  : 'bg-slate-500/20 text-slate-300 border border-slate-500/40'
+              }`}
+            >
+              <span className={`h-2 w-2 rounded-full ${sellerOnline ? 'bg-emerald-400' : 'bg-slate-400'}`} />
+              {presenceLabel(seller.last_seen_at)}
+            </span>
+          </div>
+        )}
 
         <div className="grid gap-3">
           <Link

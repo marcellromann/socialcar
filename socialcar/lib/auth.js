@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase';
+import { touchLastSeen } from './presence';
 
 const AuthCtx = createContext({
   user: null,
@@ -9,6 +10,7 @@ const AuthCtx = createContext({
   loading: true,
   refresh: () => {},
   signOut: async () => {},
+  updateLastSeen: async () => {},
 });
 
 export function AuthProvider({ children }) {
@@ -23,7 +25,7 @@ export function AuthProvider({ children }) {
 
     const { data: existing, error: lookupErr } = await supabase
       .from('users')
-      .select('id, email, nome, tipo, auth_id, telefone, avatar_url, created_at, cep, rua, numero, complemento, bairro, cidade, estado_endereco, status')
+      .select('id, email, nome, tipo, auth_id, telefone, avatar_url, created_at, cep, rua, numero, complemento, bairro, cidade, estado_endereco, status, last_seen_at')
       .eq('auth_id', authUser.id)
       .maybeSingle();
 
@@ -44,7 +46,7 @@ export function AuthProvider({ children }) {
       const { data: inserted, error: insertErr } = await supabase
         .from('users')
         .insert(insertPayload)
-        .select('id, email, nome, tipo, auth_id, telefone, avatar_url, created_at, cep, rua, numero, complemento, bairro, cidade, estado_endereco, status')
+        .select('id, email, nome, tipo, auth_id, telefone, avatar_url, created_at, cep, rua, numero, complemento, bairro, cidade, estado_endereco, status, last_seen_at')
         .single();
       console.log('[auth] resultado insert public.users:', { inserted, error: insertErr });
 
@@ -55,7 +57,7 @@ export function AuthProvider({ children }) {
           console.log('[auth] insert em paralelo detectado — refetch do registro existente');
           const { data: refetched } = await supabase
             .from('users')
-            .select('id, email, nome, tipo, auth_id, telefone, avatar_url, created_at, cep, rua, numero, complemento, bairro, cidade, estado_endereco, status')
+            .select('id, email, nome, tipo, auth_id, telefone, avatar_url, created_at, cep, rua, numero, complemento, bairro, cidade, estado_endereco, status, last_seen_at')
             .eq('auth_id', authUser.id)
             .maybeSingle();
           data = refetched || null;
@@ -67,7 +69,20 @@ export function AuthProvider({ children }) {
       }
     }
 
+    if (data?.id) {
+      const nowIso = new Date().toISOString();
+      data.last_seen_at = nowIso;
+      touchLastSeen(data.id);
+    }
     setAppUser(data || null);
+  }, []);
+
+  const updateLastSeen = useCallback(async () => {
+    setAppUser((u) => {
+      if (!u?.id) return u;
+      touchLastSeen(u.id);
+      return { ...u, last_seen_at: new Date().toISOString() };
+    });
   }, []);
 
   useEffect(() => {
@@ -105,8 +120,8 @@ export function AuthProvider({ children }) {
   }, [loadAppUser]);
 
   const value = useMemo(
-    () => ({ user, appUser, loading, signOut, refresh }),
-    [user, appUser, loading, signOut, refresh]
+    () => ({ user, appUser, loading, signOut, refresh, updateLastSeen }),
+    [user, appUser, loading, signOut, refresh, updateLastSeen]
   );
 
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;

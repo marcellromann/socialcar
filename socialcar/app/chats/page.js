@@ -7,6 +7,7 @@ import TopBar from '@/components/TopBar';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { buyerAlias } from '@/lib/anon';
+import { isOnline } from '@/lib/presence';
 
 export default function ChatsListPage() {
   return (
@@ -56,15 +57,31 @@ function Inner() {
         }
       }
 
+      const otherIds = [
+        ...new Set((chats || []).map((c) => (me === c.buyer_id ? c.seller_id : c.buyer_id))),
+      ];
+      let presenceById = new Map();
+      if (otherIds.length) {
+        const { data: peers } = await supabase
+          .from('users')
+          .select('id, last_seen_at')
+          .in('id', otherIds);
+        presenceById = new Map((peers || []).map((p) => [p.id, p.last_seen_at]));
+      }
+
       if (!cancel) {
         setRows(
-          (chats || []).map((c) => ({
-            ...c,
-            iAmSeller: me === c.seller_id,
-            otherUserId: me === c.buyer_id ? c.seller_id : c.buyer_id,
-            lastMessage: lastByChat[c.id],
-            unread: unreadByChat[c.id] || 0,
-          })),
+          (chats || []).map((c) => {
+            const otherUserId = me === c.buyer_id ? c.seller_id : c.buyer_id;
+            return {
+              ...c,
+              iAmSeller: me === c.seller_id,
+              otherUserId,
+              otherLastSeenAt: presenceById.get(otherUserId) || null,
+              lastMessage: lastByChat[c.id],
+              unread: unreadByChat[c.id] || 0,
+            };
+          }),
         );
         setLoading(false);
       }
@@ -106,7 +123,15 @@ function Inner() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="truncate text-sm font-semibold">{headline}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm font-semibold">{headline}</p>
+                        <span
+                          className={`h-2 w-2 shrink-0 rounded-full ${
+                            isOnline(c.otherLastSeenAt) ? 'bg-emerald-400' : 'bg-slate-500'
+                          }`}
+                          aria-label={isOnline(c.otherLastSeenAt) ? 'Online' : 'Ausente'}
+                        />
+                      </div>
                       <p className="truncate text-xs text-slate-400">
                         {c.lastMessage?.texto || subtitle}
                       </p>

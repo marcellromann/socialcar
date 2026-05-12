@@ -8,10 +8,6 @@ export default function Loading() {
           <div className="skeleton h-3 w-3/4" />
         </div>
       </div>
-      <div className="card p-3 grid grid-cols-2 gap-2">
-        <div className="skeleton h-11 rounded-xl" />
-        <div className="skeleton h-11 rounded-xl" />
-      </div>
       <div className="card p-4 space-y-3">
         <div className="skeleton h-4 w-1/3" />
         <div className="skeleton h-10 w-full" />
