@@ -45,6 +45,7 @@ function Inner() {
 
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarError, setAvatarError] = useState('');
+  const [avatarSuccess, setAvatarSuccess] = useState('');
 
   useEffect(() => {
     setForm({
@@ -173,7 +174,12 @@ function Inner() {
   async function onAvatarChange(ev) {
     const file = ev.target.files?.[0];
     ev.target.value = '';
+    setAvatarError('');
+    setAvatarSuccess('');
     if (!file || !appUser?.id) return;
+
+    console.log('[avatar] iniciando upload de foto');
+    console.log('[avatar] arquivo:', file.name, file.size, file.type);
 
     if (!file.type.startsWith('image/')) {
       setAvatarError('Selecione uma imagem.');
@@ -184,28 +190,56 @@ function Inner() {
       return;
     }
 
-    setAvatarError('');
     setUploadingAvatar(true);
     try {
       const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-      const path = `${appUser.id}/${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage
+      const filePath = `${appUser.id}/${Date.now()}.${ext}`;
+      console.log('[avatar] upload path:', filePath, 'bucket:', AVATARS_BUCKET);
+
+      const { data: upData, error: upErr } = await supabase.storage
         .from(AVATARS_BUCKET)
-        .upload(path, file, { cacheControl: '3600', upsert: false });
-      if (upErr) throw upErr;
+        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+      console.log('[avatar] resultado upload:', upData, upErr);
 
-      const { data: pub } = supabase.storage.from(AVATARS_BUCKET).getPublicUrl(path);
-      const publicUrl = pub.publicUrl;
+      if (upErr) {
+        const msg = String(upErr.message || upErr).toLowerCase();
+        if (msg.includes('bucket') && msg.includes('not found')) {
+          console.error(
+            `[avatar] bucket "${AVATARS_BUCKET}" não existe. Crie no Supabase Storage: Storage > New bucket > nome "${AVATARS_BUCKET}", marque Public bucket.`
+          );
+          setAvatarError(`Bucket "${AVATARS_BUCKET}" não encontrado no Storage. Crie o bucket no painel do Supabase.`);
+        } else {
+          setAvatarError(`Falha ao enviar foto: ${upErr.message || 'erro desconhecido'}`);
+        }
+        return;
+      }
 
-      const { error: updErr } = await supabase
+      const { data: pub } = supabase.storage.from(AVATARS_BUCKET).getPublicUrl(filePath);
+      const publicUrl = pub?.publicUrl;
+      console.log('[avatar] public URL:', publicUrl);
+      if (!publicUrl) {
+        setAvatarError('Não foi possível obter a URL pública.');
+        return;
+      }
+
+      const { data: updData, error: updErr } = await supabase
         .from('users')
         .update({ avatar_url: publicUrl })
-        .eq('id', appUser.id);
-      if (updErr) throw updErr;
+        .eq('id', appUser.id)
+        .select('id, avatar_url')
+        .maybeSingle();
+      console.log('[avatar] resultado update users:', updData, updErr);
+
+      if (updErr) {
+        setAvatarError(`Foto enviada mas não foi possível salvar no perfil: ${updErr.message}`);
+        return;
+      }
 
       await refresh();
-    } catch {
-      setAvatarError('Falha ao enviar foto. Tente novamente.');
+      setAvatarSuccess('Foto atualizada!');
+    } catch (e) {
+      console.error('[avatar] exceção inesperada:', e);
+      setAvatarError(`Falha ao enviar foto: ${e?.message || 'erro desconhecido'}`);
     } finally {
       setUploadingAvatar(false);
     }
@@ -235,9 +269,25 @@ function Inner() {
                 {initial}
               </span>
             )}
-            <span className="absolute inset-x-0 bottom-0 bg-black/60 py-0.5 text-center text-[9px] font-bold uppercase tracking-wide text-white">
-              {uploadingAvatar ? '…' : 'Trocar'}
-            </span>
+            {uploadingAvatar && (
+              <span className="absolute inset-0 grid place-items-center bg-black/60">
+                <svg
+                  className="h-6 w-6 animate-spin text-white"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                >
+                  <path d="M21 12a9 9 0 1 1-6.2-8.55" opacity="0.9" />
+                </svg>
+              </span>
+            )}
+            {!uploadingAvatar && (
+              <span className="absolute inset-x-0 bottom-0 bg-black/60 py-0.5 text-center text-[9px] font-bold uppercase tracking-wide text-white">
+                Trocar
+              </span>
+            )}
           </button>
           <input
             ref={fileInputRef}
@@ -256,6 +306,7 @@ function Inner() {
           </div>
         </div>
         {avatarError && <p className="text-xs text-red-400">{avatarError}</p>}
+        {avatarSuccess && <p className="text-xs text-emerald-400">{avatarSuccess}</p>}
 
         {/* Status */}
         <div className="card p-3">
