@@ -50,7 +50,7 @@ export default function Feed({ initialListings = [] }) {
 
   return (
     <div className="page-pad">
-      <div className="relative h-[calc(100dvh-var(--bottom-nav-h)-110px)] min-h-[420px] w-full">
+      <div className="relative h-[55vh] min-h-[420px] max-h-[calc(100dvh-var(--bottom-nav-h)-110px)] w-full">
         {empty ? (
           <EmptyState />
         ) : (
