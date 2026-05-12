@@ -383,6 +383,7 @@ export default function ListingForm() {
       console.log('[ListingForm] appUser.id (contexto) =', appUser?.id);
       console.log('cambio value:', form.cambio);
       console.log('combustivel value:', form.combustivel);
+      console.log('cambio enviado:', form.cambio);
       console.log('payload completo:', insertPayload);
 
       const { data: inserted, error: insertErr } = await supabase
@@ -789,12 +790,12 @@ function Step2Vehicle({
           required
         >
           <option value="">Selecione</option>
-          <option value="flex">Flex</option>
-          <option value="gasolina">Gasolina</option>
-          <option value="diesel">Diesel</option>
-          <option value="eletrico">Elétrico</option>
-          <option value="hibrido">Híbrido</option>
-          <option value="etanol">Etanol</option>
+          <option value="Flex">Flex</option>
+          <option value="Gasolina">Gasolina</option>
+          <option value="Diesel">Diesel</option>
+          <option value="Elétrico">Elétrico</option>
+          <option value="Híbrido">Híbrido</option>
+          <option value="Etanol">Etanol</option>
         </select>
       </Field>
 
@@ -806,10 +807,10 @@ function Step2Vehicle({
           required
         >
           <option value="">Selecione</option>
-          <option value="manual">Manual</option>
-          <option value="automatica">Automático</option>
-          <option value="cvt">CVT</option>
-          <option value="semi-automatica">Automatizado</option>
+          <option value="Manual">Manual</option>
+          <option value="Automático">Automático</option>
+          <option value="CVT">CVT</option>
+          <option value="Automatizado">Automatizado</option>
         </select>
       </Field>
 
