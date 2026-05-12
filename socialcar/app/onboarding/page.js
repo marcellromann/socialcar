@@ -114,6 +114,9 @@ const MODELOS_POR_MARCA = {
 };
 
 const MODELO_OUTRO = '__outro__';
+const MARCA_OUTRA = '__outra_marca__';
+
+const MARCAS_NOMES = new Set(MARCAS_FIPE.map((m) => m.nome));
 
 const EMPTY_CARRO = { marca: '', modelo: '', ano: '' };
 
@@ -143,6 +146,7 @@ function Inner() {
     faixa_preco: '',
   });
   const [modeloCustom, setModeloCustom] = useState(false);
+  const [marcaCustom, setMarcaCustom] = useState(false);
 
   useEffect(() => {
     let cancel = false;
@@ -169,9 +173,13 @@ function Inner() {
       const carroExistente = existing.carro_atual || {};
       const marca = carroExistente.marca || '';
       const modelo = carroExistente.modelo || '';
-      const knownModels = MODELOS_POR_MARCA[marca];
-      if (marca && modelo && knownModels && !knownModels.includes(modelo)) {
-        setModeloCustom(true);
+      if (marca && !MARCAS_NOMES.has(marca)) {
+        setMarcaCustom(true);
+      } else {
+        const knownModels = MODELOS_POR_MARCA[marca];
+        if (marca && modelo && knownModels && !knownModels.includes(modelo)) {
+          setModeloCustom(true);
+        }
       }
       setData({
         tem_carro: existing.tem_carro,
@@ -326,19 +334,52 @@ function Inner() {
           <Question label="Qual é o seu veículo?">
             <div className="space-y-3">
               <Field label="Marca">
-                <select
-                  className="input"
-                  value={data.carro_atual.marca}
-                  onChange={(e) => {
-                    setCarroField({ marca: e.target.value, modelo: '' });
-                    setModeloCustom(false);
-                  }}
-                >
-                  <option value="">Selecionar marca</option>
-                  {MARCAS_FIPE.map((m) => (
-                    <option key={m.codigo} value={m.nome}>{m.nome}</option>
-                  ))}
-                </select>
+                {marcaCustom ? (
+                  <div className="space-y-2">
+                    <input
+                      className="input"
+                      type="text"
+                      placeholder="Digite a marca do seu veículo"
+                      value={data.carro_atual.marca}
+                      onChange={(e) =>
+                        setCarroField({ marca: capitalizeWords(e.target.value) })
+                      }
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMarcaCustom(false);
+                        setModeloCustom(false);
+                        setCarroField({ marca: '', modelo: '' });
+                      }}
+                      className="text-[11px] font-bold uppercase tracking-wide text-brand-500 active:opacity-80"
+                    >
+                      ← Voltar
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    className="input"
+                    value={data.carro_atual.marca}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === MARCA_OUTRA) {
+                        setMarcaCustom(true);
+                        setModeloCustom(false);
+                        setCarroField({ marca: '', modelo: '' });
+                        return;
+                      }
+                      setCarroField({ marca: value, modelo: '' });
+                      setModeloCustom(false);
+                    }}
+                  >
+                    <option value="">Selecionar marca</option>
+                    {MARCAS_FIPE.map((m) => (
+                      <option key={m.codigo} value={m.nome}>{m.nome}</option>
+                    ))}
+                    <option value={MARCA_OUTRA}>Outra marca</option>
+                  </select>
+                )}
               </Field>
 
               <Field label="Modelo">
@@ -346,6 +387,7 @@ function Inner() {
                   marca={data.carro_atual.marca}
                   modelo={data.carro_atual.modelo}
                   modeloCustom={modeloCustom}
+                  marcaCustom={marcaCustom}
                   onPickFromList={(value) => {
                     if (value === MODELO_OUTRO) {
                       setModeloCustom(true);
@@ -432,7 +474,19 @@ function Inner() {
   );
 }
 
-function ModeloInput({ marca, modelo, modeloCustom, onPickFromList, onTypeCustom }) {
+function ModeloInput({ marca, modelo, modeloCustom, marcaCustom, onPickFromList, onTypeCustom }) {
+  if (marcaCustom) {
+    return (
+      <input
+        className="input"
+        type="text"
+        placeholder="Ex: Corolla, Civic, Onix"
+        value={modelo}
+        onChange={(e) => onTypeCustom(e.target.value)}
+      />
+    );
+  }
+
   if (!marca) {
     return (
       <input
