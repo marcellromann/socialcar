@@ -14,7 +14,6 @@ export default function CadastroPage() {
     email: '',
     password: '',
     confirm: '',
-    tipo: 'comprador',
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -42,7 +41,7 @@ export default function CadastroPage() {
       email: form.email,
       password: form.password,
       options: {
-        data: { nome: form.nome, tipo: form.tipo },
+        data: { nome: form.nome },
       },
     });
     console.log('[Cadastro] signUp →', { user: data?.user, session: !!data?.session, error: err });
@@ -67,13 +66,12 @@ export default function CadastroPage() {
           auth_id: userId,
           email: form.email,
           nome: form.nome,
-          tipo: form.tipo,
         };
         console.log('[Cadastro] inserindo public.users:', insertPayload);
         const { data: inserted, error: insertErr } = await supabase
           .from('users')
           .insert(insertPayload)
-          .select('id, auth_id, email, nome, tipo')
+          .select('id, auth_id, email, nome')
           .single();
         console.log('[Cadastro] resultado insert public.users:', { inserted, error: insertErr });
         if (insertErr) {
@@ -101,8 +99,7 @@ export default function CadastroPage() {
       return;
     }
 
-    const dest = form.tipo === 'vendedor' ? '/anunciar' : '/onboarding';
-    router.replace(dest);
+    router.replace('/onboarding');
     router.refresh();
   }
 
@@ -139,26 +136,6 @@ export default function CadastroPage() {
               <label className="label" htmlFor="confirm">Confirmar</label>
               <PasswordInput id="confirm" required minLength={6}
                 value={form.confirm} onChange={update('confirm')} />
-            </div>
-          </div>
-
-          <div>
-            <label className="label">Tipo de conta</label>
-            <div className="grid grid-cols-3 gap-2">
-              {['comprador', 'vendedor', 'ambos'].map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setForm((f) => ({ ...f, tipo: t }))}
-                  className={`rounded-xl border px-3 py-2.5 text-xs font-bold uppercase tracking-wide ${
-                    form.tipo === t
-                      ? 'border-brand-500 bg-brand-500/10 text-brand-500'
-                      : 'border-outline bg-card text-white'
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
             </div>
           </div>
 
