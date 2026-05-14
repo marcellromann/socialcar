@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from './supabase';
 import { touchLastSeen } from './presence';
 
@@ -13,75 +13,98 @@ const AuthCtx = createContext({
   updateLastSeen: async () => {},
 });
 
+// Throttle de touchLastSeen: 1 update por minuto basta pra presença "online".
+const TOUCH_THROTTLE_MS = 60_000;
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [appUser, setAppUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Cache em memória do appUser já carregado, indexado por auth_id. Evita
+  // refetch de /api/me em cada INITIAL_SESSION / TOKEN_REFRESHED disparado pelo
+  // supabase.auth.onAuthStateChange (que acontece em todo mount e a cada hora).
+  const cachedRef   = useRef({ authId: null, appUser: null });
+  // Dedup: se duas chamadas a loadAppUser para o mesmo auth_id chegarem em
+  // paralelo (getUser + INITIAL_SESSION), a segunda aguarda a promessa em vôo.
+  const inflightRef = useRef(null); // { authId, promise }
+  const lastTouchRef = useRef(0);
+
   const loadAppUser = useCallback(async (authUser) => {
-    if (!authUser) { setAppUser(null); return; }
+    if (!authUser) {
+      cachedRef.current = { authId: null, appUser: null };
+      inflightRef.current = null;
+      setAppUser(null);
+      return;
+    }
+
+    // Hit no cache: mesmo auth_id já carregado. Só faz touchLastSeen com
+    // throttle e mantém o appUser atual — sem fetch nem re-render.
+    if (cachedRef.current.authId === authUser.id && cachedRef.current.appUser) {
+      const now = Date.now();
+      if (now - lastTouchRef.current > TOUCH_THROTTLE_MS) {
+        lastTouchRef.current = now;
+        touchLastSeen(cachedRef.current.appUser.id);
+      }
+      return;
+    }
+
+    // Já tem fetch em vôo pro mesmo auth_id: aguarda em vez de duplicar.
+    if (inflightRef.current?.authId === authUser.id) {
+      await inflightRef.current.promise;
+      return;
+    }
 
     console.log('[auth] loadAppUser — auth_id:', authUser.id, 'email:', authUser.email);
 
-    const { data: existing, error: lookupErr } = await supabase
-      .from('users')
-      .select('id, email, nome, tipo, auth_id, telefone, avatar_url, created_at, cep, rua, numero, complemento, bairro, cidade, estado_endereco, status, last_seen_at')
-      .eq('auth_id', authUser.id)
-      .maybeSingle();
-
-    console.log('[auth] users lookup →', { existing, error: lookupErr });
-
-    let data = existing;
-
-    // Primeira vez (login social ou cadastro que não criou o registro): insere agora
-    if (!data) {
-      const meta = authUser.user_metadata || {};
-      const insertPayload = {
-        auth_id: authUser.id,
-        email: authUser.email,
-        nome: meta.nome || meta.full_name || meta.name || null,
-        tipo: meta.tipo || 'comprador',
-      };
-      console.log('[auth] criando registro em public.users (primeira vez):', insertPayload);
-      const { data: inserted, error: insertErr } = await supabase
-        .from('users')
-        .insert(insertPayload)
-        .select('id, email, nome, tipo, auth_id, telefone, avatar_url, created_at, cep, rua, numero, complemento, bairro, cidade, estado_endereco, status, last_seen_at')
-        .single();
-      console.log('[auth] resultado insert public.users:', { inserted, error: insertErr });
-
-      if (insertErr) {
-        // 23505 = unique_violation. Significa que /cadastro já inseriu em
-        // paralelo. Refetch o registro existente em vez de tratar como falha.
-        if (insertErr.code === '23505') {
-          console.log('[auth] insert em paralelo detectado — refetch do registro existente');
-          const { data: refetched } = await supabase
-            .from('users')
-            .select('id, email, nome, tipo, auth_id, telefone, avatar_url, created_at, cep, rua, numero, complemento, bairro, cidade, estado_endereco, status, last_seen_at')
-            .eq('auth_id', authUser.id)
-            .maybeSingle();
-          data = refetched || null;
-        } else {
-          console.error('[auth] FALHA ao criar public.users — appUser ficará null:', insertErr);
-        }
-      } else {
-        data = inserted;
+    const promise = (async () => {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      if (!token) {
+        console.warn('[auth] sem access_token na sessão — appUser ficará null');
+        return null;
       }
-    }
+      try {
+        const res = await fetch('/api/me', {
+          headers: { authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          console.error('[auth] /api/me falhou:', res.status, json);
+          return null;
+        }
+        console.log('[auth] /api/me →', { source: json.source, appUser: json.appUser });
+        return json.appUser || null;
+      } catch (e) {
+        console.error('[auth] /api/me erro de rede:', e);
+        return null;
+      }
+    })();
+
+    inflightRef.current = { authId: authUser.id, promise };
+    const data = await promise;
+    inflightRef.current = null;
 
     if (data?.id) {
       const nowIso = new Date().toISOString();
       data.last_seen_at = nowIso;
+      lastTouchRef.current = Date.now();
       touchLastSeen(data.id);
     }
+    cachedRef.current = { authId: authUser.id, appUser: data };
     setAppUser(data || null);
   }, []);
 
   const updateLastSeen = useCallback(async () => {
     setAppUser((u) => {
       if (!u?.id) return u;
-      touchLastSeen(u.id);
-      return { ...u, last_seen_at: new Date().toISOString() };
+      const now = Date.now();
+      if (now - lastTouchRef.current > TOUCH_THROTTLE_MS) {
+        lastTouchRef.current = now;
+        touchLastSeen(u.id);
+      }
+      return { ...u, last_seen_at: new Date(now).toISOString() };
     });
   }, []);
 
@@ -91,14 +114,23 @@ export function AuthProvider({ children }) {
       const { data } = await supabase.auth.getUser();
       if (cancel) return;
       const u = data?.user || null;
-      setUser(u);
+      setUser((prev) => (prev?.id === u?.id ? prev : u));
       await loadAppUser(u);
       setLoading(false);
     })();
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       const u = session?.user || null;
-      setUser(u);
-      loadAppUser(u);
+      // setUser só se o id de fato mudou — evita re-render em cascata pra
+      // os 15 componentes que consomem useAuth() quando o evento é apenas
+      // TOKEN_REFRESHED ou INITIAL_SESSION pro mesmo usuário.
+      setUser((prev) => (prev?.id === u?.id ? prev : u));
+      // SIGNED_OUT zera tudo. Caso contrário, loadAppUser já tem cache+dedup,
+      // então é seguro chamar — vira no-op se o auth_id não mudou.
+      if (event === 'SIGNED_OUT' || !u) {
+        loadAppUser(null);
+      } else {
+        loadAppUser(u);
+      }
     });
     return () => {
       cancel = true;
@@ -108,11 +140,15 @@ export function AuthProvider({ children }) {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
+    cachedRef.current = { authId: null, appUser: null };
+    inflightRef.current = null;
     setUser(null);
     setAppUser(null);
   }, []);
 
   const refresh = useCallback(async () => {
+    // Invalida o cache pra forçar um refetch real.
+    cachedRef.current = { authId: null, appUser: null };
     const { data } = await supabase.auth.getUser();
     const u = data?.user || null;
     setUser(u);

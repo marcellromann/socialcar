@@ -1,6 +1,7 @@
 import './globals.css';
 import { Barlow, Barlow_Condensed } from 'next/font/google';
 import BottomNav from '@/components/BottomNav';
+import PageViewTracker from '@/components/PageViewTracker';
 import { AuthProvider } from '@/lib/auth';
 
 const barlow = Barlow({
@@ -41,6 +42,7 @@ export default function RootLayout({ children }) {
     <html lang="pt-BR" className={`dark ${barlow.variable} ${barlowCondensed.variable}`}>
       <body className="bg-page font-sans text-white antialiased">
         <AuthProvider>
+          <PageViewTracker />
           <div className="shell">
             {children}
             <BottomNav />
