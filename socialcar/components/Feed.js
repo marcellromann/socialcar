@@ -1,17 +1,27 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import SwipeCard from './SwipeCard';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
+const FEED_FIELDS =
+  'id, user_id, marca, modelo, ano, versao, km, preco, cidade, estado, foto_principal_url, verificado, created_at';
+const PAGE_SIZE = 20;
+
 export default function Feed({ initialListings = [] }) {
   const router = useRouter();
   const { appUser } = useAuth();
   const [stack, setStack] = useState(initialListings);
+  const [exhausted, setExhausted] = useState(false);
   const [saved, setSaved] = useState([]);
   const seenRef = useRef(new Set());
+  const idsLoadedRef = useRef(new Set(initialListings.map((l) => l.id)));
+  const oldestCreatedAtRef = useRef(
+    initialListings.length ? initialListings[initialListings.length - 1].created_at : null
+  );
+  const fetchingRef = useRef(false);
 
   const top = stack[0];
   const next = stack[1];
@@ -25,6 +35,72 @@ export default function Feed({ initialListings = [] }) {
     seenRef.current.add(top.id);
     recordEvent(top.id, 'view', appUser?.id);
   }, [top, appUser?.id]);
+
+  const loadMore = useCallback(async () => {
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+    try {
+      let query = supabase
+        .from('listings_public')
+        .select(FEED_FIELDS)
+        .eq('status', 'ativo')
+        .order('created_at', { ascending: false })
+        .limit(PAGE_SIZE);
+      if (oldestCreatedAtRef.current) {
+        query = query.lt('created_at', oldestCreatedAtRef.current);
+      }
+      let { data, error } = await query;
+      if (error) {
+        let fb = supabase
+          .from('listings')
+          .select(FEED_FIELDS)
+          .order('created_at', { ascending: false })
+          .limit(PAGE_SIZE);
+        if (oldestCreatedAtRef.current) fb = fb.lt('created_at', oldestCreatedAtRef.current);
+        const r = await fb;
+        data = r.data ?? [];
+      }
+      const fresh = (data || []).filter((l) => !idsLoadedRef.current.has(l.id));
+      if (fresh.length === 0) {
+        setExhausted(true);
+        return;
+      }
+      fresh.forEach((l) => idsLoadedRef.current.add(l.id));
+      oldestCreatedAtRef.current = fresh[fresh.length - 1].created_at;
+
+      const sellerIds = [...new Set(fresh.map((l) => l.user_id).filter(Boolean))];
+      let bySeller = new Map();
+      if (sellerIds.length) {
+        const { data: sellers } = await supabase
+          .from('users')
+          .select('id, last_seen_at')
+          .in('id', sellerIds);
+        bySeller = new Map((sellers || []).map((s) => [s.id, s.last_seen_at]));
+      }
+      const enriched = fresh.map((l) => ({
+        ...l,
+        seller_last_seen_at: bySeller.get(l.user_id) || null,
+      }));
+      setStack((s) => [...s, ...enriched]);
+    } finally {
+      fetchingRef.current = false;
+    }
+  }, []);
+
+  // Infinite scroll: pré-busca quando o stack ficar curto.
+  useEffect(() => {
+    if (!exhausted && stack.length < 3) loadMore();
+  }, [stack.length, exhausted, loadMore]);
+
+  function handleReset() {
+    setStack(initialListings);
+    setExhausted(false);
+    seenRef.current = new Set();
+    idsLoadedRef.current = new Set(initialListings.map((l) => l.id));
+    oldestCreatedAtRef.current = initialListings.length
+      ? initialListings[initialListings.length - 1].created_at
+      : null;
+  }
 
   function handleSwipe(direction, listing) {
     setStack((s) => s.slice(1));
@@ -52,12 +128,12 @@ export default function Feed({ initialListings = [] }) {
     <div className="page-pad">
       <div className="relative h-[61vh] min-h-[420px] max-h-[calc(100dvh-var(--bottom-nav-h)-110px)] w-full">
         {empty ? (
-          <EmptyState />
+          <EmptyState onReset={handleReset} canReset={initialListings.length > 0} />
         ) : (
           <>
-            {third && <SwipeCard listing={third} depth={2} />}
-            {next  && <SwipeCard listing={next}  depth={1} />}
-            {top   && <SwipeCard listing={top}   depth={0} onSwipe={handleSwipe} />}
+            {third && <SwipeCard key={third.id} listing={third} depth={2} />}
+            {next  && <SwipeCard key={next.id}  listing={next}  depth={1} />}
+            {top   && <SwipeCard key={top.id}   listing={top}   depth={0} onSwipe={handleSwipe} />}
           </>
         )}
       </div>
@@ -132,14 +208,19 @@ function CircleButton({ children, label, onClick, variant = 'ghost', big = false
   );
 }
 
-function EmptyState() {
+function EmptyState({ onReset, canReset }) {
   return (
     <div className="grid h-full w-full place-items-center rounded-3xl border border-dashed border-outline bg-card p-6 text-center">
       <div>
         <h3 className="display text-2xl text-white">Acabou por aqui!</h3>
         <p className="mt-2 text-sm text-slate-400">
-          Você viu todos os anúncios disponíveis. Atualize daqui a pouco para ver os próximos.
+          Você viu todos os anúncios por enquanto.
         </p>
+        {canReset && (
+          <button type="button" onClick={onReset} className="btn-primary mt-4">
+            Ver novamente
+          </button>
+        )}
       </div>
     </div>
   );
