@@ -23,6 +23,8 @@ export default function PageViewTracker() {
     if (!pathname) return;
     // Bloqueio do admin: não registra nada.
     if (appUser?.role === 'admin') return;
+    // Rotas administrativas nunca entram em métricas, mesmo para não-admins.
+    if (pathname.startsWith('/admin') || pathname.startsWith('/api/admin')) return;
 
     // Dedup por (pathname, user) — evita disparar 2x em remounts/HMR.
     const key = `${pathname}|${appUser?.id || 'anon'}`;

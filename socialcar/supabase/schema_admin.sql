@@ -55,6 +55,22 @@ create policy "page_views_select_admin"
   );
 
 -- ----------------------------------------------------------------------------
+-- admin_unique_visitors(p_start): count(distinct user_id) ignorando NULL e
+-- admins. Chamada por /api/admin/stats via supabase.rpc(). p_start = NULL → total.
+-- ----------------------------------------------------------------------------
+create or replace function public.admin_unique_visitors(p_start timestamptz default null)
+returns bigint
+language sql
+stable
+as $$
+  select count(distinct pv.user_id)::bigint
+  from public.page_views pv
+  where pv.user_id is not null
+    and pv.user_id not in (select id from public.users where role = 'admin')
+    and (p_start is null or pv.created_at >= p_start);
+$$;
+
+-- ----------------------------------------------------------------------------
 -- ADMIN_LOGS: registro de ações administrativas
 -- ----------------------------------------------------------------------------
 create table if not exists public.admin_logs (

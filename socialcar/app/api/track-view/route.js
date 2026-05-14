@@ -15,6 +15,12 @@ export async function POST(request) {
 
     if (!page) return NextResponse.json({ ok: false }, { status: 400 });
 
+    // Defesa em profundidade: rotas administrativas nunca entram em page_views,
+    // mesmo que o cliente burle o bloqueio do PageViewTracker.
+    if (page.startsWith('/admin') || page.startsWith('/api/admin')) {
+      return NextResponse.json({ ok: true, skipped: 'admin_route' });
+    }
+
     // Resolução opcional do usuário via Bearer token. Falhas silenciosas
     // → registra como anônimo (user_id = null).
     let userId = null;

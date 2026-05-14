@@ -42,6 +42,9 @@ export async function GET(request) {
     { count: totalSellers },
     { count: totalUsers },
     uaResp,
+    uniqTodayResp,
+    uniqMonthResp,
+    uniqTotalResp,
   ] = await Promise.all([
     excludeAdmins(
       supabase.from('page_views').select('*', { count: 'exact', head: true }).gte('created_at', startOfDay),
@@ -63,6 +66,11 @@ export async function GET(request) {
       supabase.from('page_views').select('user_agent').order('created_at', { ascending: false }).limit(5000),
       adminIds,
     ),
+    // Visitantes únicos (count distinct user_id) — RPC porque o SDK não expõe
+    // distinct count nativo. A função já ignora user_id null e admins.
+    supabase.rpc('admin_unique_visitors', { p_start: startOfDay }),
+    supabase.rpc('admin_unique_visitors', { p_start: startOfMonth }),
+    supabase.rpc('admin_unique_visitors', { p_start: null }),
   ]);
 
   let mobile = 0, desktop = 0;
@@ -81,6 +89,11 @@ export async function GET(request) {
       total: viewsTotal || 0,
       mobile_pct: mobilePct,
       desktop_pct: desktopPct,
+    },
+    unicos: {
+      hoje: Number(uniqTodayResp?.data) || 0,
+      mes: Number(uniqMonthResp?.data) || 0,
+      total: Number(uniqTotalResp?.data) || 0,
     },
     anuncios: {
       ativos: activeListings || 0,
