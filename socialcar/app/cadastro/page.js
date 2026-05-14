@@ -133,8 +133,8 @@ export default function CadastroPage() {
                 value={form.password} onChange={update('password')} />
             </div>
             <div>
-              <label className="label" htmlFor="confirm">Confirmar</label>
-              <PasswordInput id="confirm" required minLength={6}
+              <label className="label" htmlFor="confirm">Confirmar senha</label>
+              <PasswordInput id="confirm" required minLength={6} placeholder="Confirmar senha"
                 value={form.confirm} onChange={update('confirm')} />
             </div>
           </div>
