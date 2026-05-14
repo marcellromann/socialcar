@@ -63,7 +63,7 @@ export default function Feed({ initialListings = [] }) {
       </div>
 
       <div className="mt-5 flex items-center justify-between">
-        <CircleButton label="Passar" onClick={() => handleAction('pass')} variant="danger" disabled={empty}>
+        <CircleButton label="Próximo" onClick={() => handleAction('pass')} variant="danger" disabled={empty}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
             <path d="M6 6 18 18M18 6 6 18" />
           </svg>
@@ -73,7 +73,7 @@ export default function Feed({ initialListings = [] }) {
             <path d="M21 12a8 8 0 0 1-11.5 7.2L4 21l1.8-5.5A8 8 0 1 1 21 12Z" />
           </svg>
         </CircleButton>
-        <CircleButton label="Interesse" onClick={() => handleAction('interest')} variant="brand" big disabled={empty}>
+        <CircleButton label="Interessante" onClick={() => handleAction('interest')} variant="brand" big disabled={empty}>
           <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 21s-7-4.35-7-10a4.5 4.5 0 0 1 8-2.83A4.5 4.5 0 0 1 19 11c0 5.65-7 10-7 10Z" />
           </svg>
