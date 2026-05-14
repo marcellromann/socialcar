@@ -133,13 +133,13 @@ export default function SwipeCard({ listing, onSwipe, depth = 0 }) {
           className="absolute left-5 top-5 rotate-[-12deg] rounded-md border-4 border-brand-500 px-3 py-1 font-display text-2xl font-black uppercase text-brand-500"
           style={{ opacity: opacityRight }}
         >
-          interesse
+          interessante
         </div>
         <div
           className="absolute right-5 top-5 rotate-[12deg] rounded-md border-4 border-red-400 px-3 py-1 font-display text-2xl font-black uppercase text-red-400"
           style={{ opacity: opacityLeft }}
         >
-          passar
+          próximo
         </div>
       </div>
     </div>
