@@ -179,6 +179,38 @@ create index if not exists interests_listing_idx on public.interests (listing_id
 create index if not exists interests_buyer_idx   on public.interests (buyer_id);
 
 -- ----------------------------------------------------------------------------
+-- SAVES (anúncios salvos/favoritados pelo comprador)
+-- ----------------------------------------------------------------------------
+create table if not exists public.saves (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references public.users(id) on delete cascade,
+  listing_id  uuid not null references public.listings(id) on delete cascade,
+  created_at  timestamptz not null default now(),
+  unique (user_id, listing_id)
+);
+
+create index if not exists saves_user_idx    on public.saves (user_id, created_at desc);
+create index if not exists saves_listing_idx on public.saves (listing_id);
+
+alter table public.saves enable row level security;
+
+drop policy if exists "usuario ve salvos"    on public.saves;
+drop policy if exists "usuario insere salvo" on public.saves;
+drop policy if exists "usuario deleta salvo" on public.saves;
+
+create policy "usuario ve salvos"
+  on public.saves for select
+  using (user_id in (select id from public.users where auth_id = auth.uid()));
+
+create policy "usuario insere salvo"
+  on public.saves for insert
+  with check (user_id in (select id from public.users where auth_id = auth.uid()));
+
+create policy "usuario deleta salvo"
+  on public.saves for delete
+  using (user_id in (select id from public.users where auth_id = auth.uid()));
+
+-- ----------------------------------------------------------------------------
 -- CHATS + MESSAGES
 -- ----------------------------------------------------------------------------
 create table if not exists public.chats (

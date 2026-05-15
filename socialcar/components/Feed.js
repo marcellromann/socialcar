@@ -15,7 +15,7 @@ export default function Feed({ initialListings = [] }) {
   const { appUser } = useAuth();
   const [stack, setStack] = useState(initialListings);
   const [exhausted, setExhausted] = useState(false);
-  const [saved, setSaved] = useState([]);
+  const [savedIds, setSavedIds] = useState(() => new Set());
   const seenRef = useRef(new Set());
   const idsLoadedRef = useRef(new Set(initialListings.map((l) => l.id)));
   const oldestCreatedAtRef = useRef(
@@ -35,6 +35,20 @@ export default function Feed({ initialListings = [] }) {
     seenRef.current.add(top.id);
     recordEvent(top.id, 'view', appUser?.id);
   }, [top, appUser?.id]);
+
+  // Carrega ids salvos pelo usuário para refletir estado do bookmark.
+  useEffect(() => {
+    if (!appUser?.id) { setSavedIds(new Set()); return; }
+    let cancel = false;
+    (async () => {
+      const { data } = await supabase
+        .from('saves')
+        .select('listing_id')
+        .eq('user_id', appUser.id);
+      if (!cancel) setSavedIds(new Set((data || []).map((r) => r.listing_id)));
+    })();
+    return () => { cancel = true; };
+  }, [appUser?.id]);
 
   const loadMore = useCallback(async () => {
     if (fetchingRef.current) return;
@@ -118,11 +132,35 @@ export default function Feed({ initialListings = [] }) {
     if (action === 'pass')     handleSwipe('left', top);
     if (action === 'interest') handleSwipe('right', top);
     if (action === 'chat')     router.push(`/chats/novo?listing=${top.id}`);
-    if (action === 'save') {
-      recordEvent(top.id, 'save', appUser?.id);
-      setSaved((s) => [...s, top.id]);
+    if (action === 'save')     toggleSave(top);
+  }
+
+  async function toggleSave(listing) {
+    if (!appUser?.id) {
+      router.push('/entrar');
+      return;
+    }
+    const isSaved = savedIds.has(listing.id);
+    setSavedIds((s) => {
+      const n = new Set(s);
+      if (isSaved) n.delete(listing.id); else n.add(listing.id);
+      return n;
+    });
+    if (isSaved) {
+      await supabase
+        .from('saves')
+        .delete()
+        .eq('user_id', appUser.id)
+        .eq('listing_id', listing.id);
+    } else {
+      recordEvent(listing.id, 'save', appUser.id);
+      await supabase
+        .from('saves')
+        .insert({ user_id: appUser.id, listing_id: listing.id });
     }
   }
+
+  const topIsSaved = top ? savedIds.has(top.id) : false;
 
   return (
     <div className="page-pad">
@@ -154,16 +192,23 @@ export default function Feed({ initialListings = [] }) {
             <path d="M12 21s-7-4.35-7-10a4.5 4.5 0 0 1 8-2.83A4.5 4.5 0 0 1 19 11c0 5.65-7 10-7 10Z" />
           </svg>
         </CircleButton>
-        <CircleButton label="Salvar" onClick={() => handleAction('save')} disabled={empty}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M6 4h12v17l-6-4-6 4Z" />
-          </svg>
+        <CircleButton
+          label={topIsSaved ? 'Remover dos salvos' : 'Salvar'}
+          onClick={() => handleAction('save')}
+          disabled={empty}
+          variant={topIsSaved ? 'saved' : 'ghost'}
+        >
+          {topIsSaved ? (
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 4h12v17l-6-4-6 4Z" />
+            </svg>
+          ) : (
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 4h12v17l-6-4-6 4Z" />
+            </svg>
+          )}
         </CircleButton>
       </div>
-
-      {saved.length > 0 && (
-        <p className="mt-3 text-center text-xs text-slate-400">{saved.length} salvos</p>
-      )}
     </div>
   );
 }
@@ -194,6 +239,7 @@ function CircleButton({ children, label, onClick, variant = 'ghost', big = false
     ghost:  'bg-elevated text-white border border-outline',
     danger: 'bg-elevated text-red-400 border border-red-500/30',
     brand:  'bg-brand-500 text-black shadow-lg shadow-brand-500/30',
+    saved:  'bg-elevated text-brand-500 border border-brand-500/40',
   }[variant];
   return (
     <button
