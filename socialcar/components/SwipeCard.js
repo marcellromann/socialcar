@@ -6,7 +6,7 @@ import { isOnline } from '@/lib/presence';
 
 const THRESHOLD = 110;
 
-export default function SwipeCard({ listing, onSwipe, depth = 0 }) {
+export default function SwipeCard({ listing, onSwipe, depth = 0, userEstado = null }) {
   const ref = useRef(null);
   const start = useRef(null);
   const [drag, setDrag] = useState({ x: 0, y: 0 });
@@ -54,6 +54,8 @@ export default function SwipeCard({ listing, onSwipe, depth = 0 }) {
     depth === 0
       ? `translate3d(${drag.x}px, ${drag.y * 0.4}px, 0) rotate(${rotation}deg)`
       : `translate3d(0, ${depth * 8}px, 0) scale(${1 - depth * 0.04})`;
+
+  const nearby = !!userEstado && !!listing.estado && listing.estado === userEstado;
 
   return (
     <div
@@ -108,6 +110,15 @@ export default function SwipeCard({ listing, onSwipe, depth = 0 }) {
                   <path d="m5 12 5 5L20 7" />
                 </svg>
                 Verificado
+              </span>
+            )}
+            {nearby && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-brand-500/40 bg-brand-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand-500">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s7-7.58 7-12a7 7 0 1 0-14 0c0 4.42 7 12 7 12Z" />
+                  <circle cx="12" cy="10" r="2.5" />
+                </svg>
+                Perto de você
               </span>
             )}
             <span className="chip">{listing.ano}</span>

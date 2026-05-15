@@ -10,12 +10,63 @@ const FEED_FIELDS =
   'id, user_id, marca, modelo, ano, versao, km, preco, cidade, estado, foto_principal_url, verificado, created_at';
 const PAGE_SIZE = 20;
 
+// Faixas de preço do buyer_profile → predicado sobre `preco`.
+const PRICE_RANGE_CHECKS = {
+  ate_50k:     (p) => p <= 50000,
+  '50k_100k':  (p) => p >= 50000  && p <= 100000,
+  '100k_150k': (p) => p >= 100000 && p <= 150000,
+  '150k_200k': (p) => p >= 150000 && p <= 200000,
+  '200k_300k': (p) => p >= 200000 && p <= 300000,
+  '300k_500k': (p) => p >= 300000 && p <= 500000,
+  acima_500k:  (p) => p > 500000,
+};
+
+function priceInFaixa(preco, faixa) {
+  const check = PRICE_RANGE_CHECKS[faixa];
+  if (!check || preco == null) return false;
+  return check(Number(preco));
+}
+
+function listingTier(listing, profile) {
+  if (!profile) return 4;
+  const sameEstado = !!profile.estado && listing.estado === profile.estado;
+  const inPrice    = !!profile.faixa_preco && priceInFaixa(listing.preco, profile.faixa_preco);
+  if (sameEstado && inPrice) return 1;
+  if (sameEstado)            return 2;
+  if (inPrice)               return 3;
+  return 4;
+}
+
+function sortByProfile(listings, profile) {
+  if (!profile || (!profile.estado && !profile.faixa_preco)) return listings;
+  return [...listings].sort((a, b) => {
+    const ta = listingTier(a, profile);
+    const tb = listingTier(b, profile);
+    if (ta !== tb) return ta - tb;
+    const da = a.created_at || '';
+    const db = b.created_at || '';
+    if (db > da) return 1;
+    if (db < da) return -1;
+    return 0;
+  });
+}
+
+// Preserva o card atualmente no topo (depth=0) durante a reordenação para
+// não trocar o card que o usuário está prestes a interagir.
+function reorderPreservingHead(stack, profile) {
+  if (stack.length <= 1) return sortByProfile(stack, profile);
+  const [head, ...rest] = stack;
+  return [head, ...sortByProfile(rest, profile)];
+}
+
 export default function Feed({ initialListings = [] }) {
   const router = useRouter();
   const { appUser } = useAuth();
   const [stack, setStack] = useState(initialListings);
   const [exhausted, setExhausted] = useState(false);
   const [savedIds, setSavedIds] = useState(() => new Set());
+  const [buyerProfile, setBuyerProfile] = useState(null);
+  const buyerProfileRef = useRef(null);
   const seenRef = useRef(new Set());
   const idsLoadedRef = useRef(new Set(initialListings.map((l) => l.id)));
   const oldestCreatedAtRef = useRef(
@@ -49,6 +100,34 @@ export default function Feed({ initialListings = [] }) {
     })();
     return () => { cancel = true; };
   }, [appUser?.id]);
+
+  // Carrega buyer_profile do usuário para personalizar a ordem do feed.
+  useEffect(() => {
+    if (!appUser?.id) {
+      setBuyerProfile(null);
+      buyerProfileRef.current = null;
+      return;
+    }
+    let cancel = false;
+    (async () => {
+      const { data } = await supabase
+        .from('buyer_profiles')
+        .select('estado, faixa_preco, categorias_buscadas')
+        .eq('user_id', appUser.id)
+        .maybeSingle();
+      if (cancel) return;
+      const profile = data || null;
+      buyerProfileRef.current = profile;
+      setBuyerProfile(profile);
+    })();
+    return () => { cancel = true; };
+  }, [appUser?.id]);
+
+  // Reordena o stack quando o buyer_profile carrega (preservando o card do topo).
+  useEffect(() => {
+    if (!buyerProfile) return;
+    setStack((s) => reorderPreservingHead(s, buyerProfile));
+  }, [buyerProfile]);
 
   const loadMore = useCallback(async () => {
     if (fetchingRef.current) return;
@@ -95,7 +174,7 @@ export default function Feed({ initialListings = [] }) {
         ...l,
         seller_last_seen_at: bySeller.get(l.user_id) || null,
       }));
-      setStack((s) => [...s, ...enriched]);
+      setStack((s) => reorderPreservingHead([...s, ...enriched], buyerProfileRef.current));
     } finally {
       fetchingRef.current = false;
     }
@@ -161,6 +240,7 @@ export default function Feed({ initialListings = [] }) {
   }
 
   const topIsSaved = top ? savedIds.has(top.id) : false;
+  const userEstado = buyerProfile?.estado || null;
 
   return (
     <div className="page-pad">
@@ -169,9 +249,9 @@ export default function Feed({ initialListings = [] }) {
           <EmptyState onReset={handleReset} canReset={initialListings.length > 0} />
         ) : (
           <>
-            {third && <SwipeCard key={third.id} listing={third} depth={2} />}
-            {next  && <SwipeCard key={next.id}  listing={next}  depth={1} />}
-            {top   && <SwipeCard key={top.id}   listing={top}   depth={0} onSwipe={handleSwipe} />}
+            {third && <SwipeCard key={third.id} listing={third} depth={2} userEstado={userEstado} />}
+            {next  && <SwipeCard key={next.id}  listing={next}  depth={1} userEstado={userEstado} />}
+            {top   && <SwipeCard key={top.id}   listing={top}   depth={0} userEstado={userEstado} onSwipe={handleSwipe} />}
           </>
         )}
       </div>
