@@ -39,12 +39,24 @@ export default function SwipeTutorial() {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-16">
-          <div className="swipe-hint-left flex flex-col items-center" style={{ color: 'rgba(255,255,255,0.6)' }}>
-            <span className="text-6xl font-light leading-none">←</span>
+          <div className="flex flex-col items-center" style={{ color: 'rgba(255,255,255,0.6)' }}>
+            <span
+              className="swipe-hint-left leading-none"
+              style={{ fontSize: '48px', opacity: 0.5 }}
+              aria-hidden="true"
+            >
+              👈
+            </span>
             <span className="mt-3 text-base font-semibold uppercase tracking-[0.2em]">Próximo</span>
           </div>
-          <div className="swipe-hint-right flex flex-col items-center" style={{ color: '#AAFF00' }}>
-            <span className="text-6xl font-light leading-none">→</span>
+          <div className="flex flex-col items-center" style={{ color: '#AAFF00' }}>
+            <span
+              className="swipe-hint-right leading-none"
+              style={{ fontSize: '48px', opacity: 0.5 }}
+              aria-hidden="true"
+            >
+              👉
+            </span>
             <span className="mt-3 text-base font-semibold uppercase tracking-[0.2em]">Interessante</span>
           </div>
         </div>
