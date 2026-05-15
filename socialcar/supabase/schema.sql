@@ -150,6 +150,10 @@ do $$ begin
     check (combustivel in ('gasolina','etanol','flex','diesel','eletrico','hibrido'));
 end $$;
 
+-- Motivo de exclusão e timestamp da exclusão.
+alter table public.listings add column if not exists motivo_exclusao text;
+alter table public.listings add column if not exists deleted_at      timestamptz;
+
 -- ----------------------------------------------------------------------------
 -- LISTING_PHOTOS (galeria de fotos de cada anúncio)
 -- Limite por anúncio: mínimo 3, máximo 15 (validado no frontend).
@@ -283,7 +287,8 @@ create or replace view public.listings_public as
     id, user_id, marca, modelo, ano, versao, km, preco, combustivel, cambio,
     cor, descricao, acessorios, cidade, estado, foto_principal_url,
     status, verificado, created_at, updated_at
-  from public.listings;
+  from public.listings
+  where deleted_at is null;
 
 -- ----------------------------------------------------------------------------
 -- RPC: criar anúncio com checagem de placa duplicada e rate limit (10/usuário)

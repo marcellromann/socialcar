@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import RequireAuth from '@/components/RequireAuth';
 import TopBar from '@/components/TopBar';
-import Sparkline, { bucketByDay } from '@/components/Sparkline';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { formatKm, formatPrice } from '@/lib/format';
@@ -16,6 +15,33 @@ const STATUS_LABEL = {
   ativo: { label: 'Ativo', color: 'bg-brand-500/20 text-brand-500' },
   pausado: { label: 'Pausado', color: 'bg-red-500/20 text-red-300' },
 };
+
+const EXPIRATION_DAYS = 90;
+const EXPIRATION_WARNING_DAYS = 7;
+
+const DELETE_REASONS = [
+  { id: 'vendi_socialcar', label: 'Vendi pela SocialCar 🎉', celebrate: true },
+  { id: 'vendi_outro',     label: 'Vendi por outro meio',    celebrate: false },
+  { id: 'desisti',         label: 'Desisti de vender',       celebrate: false },
+];
+
+function formatDate(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleDateString('pt-BR');
+  } catch { return '—'; }
+}
+
+function expirationInfo(createdAt) {
+  if (!createdAt) return null;
+  const created = new Date(createdAt);
+  const expires = new Date(created);
+  expires.setDate(expires.getDate() + EXPIRATION_DAYS);
+  const now = new Date();
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const daysLeft = Math.ceil((expires - now) / msPerDay);
+  return { expires, daysLeft, expired: daysLeft <= 0 };
+}
 
 export default function MeusAnunciosPage() {
   return (
@@ -36,6 +62,8 @@ function Inner() {
   const [successMsg, setSuccessMsg] = useState(
     searchParams.get('published') === '1' ? 'Anúncio publicado com sucesso!' : ''
   );
+  const [deleteFor, setDeleteFor] = useState(null);
+  const [celebrate, setCelebrate] = useState(false);
 
   useEffect(() => {
     if (searchParams.get('published') !== '1') return;
@@ -55,6 +83,7 @@ function Inner() {
         .from('listings')
         .select('*')
         .eq('user_id', appUser.id)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
       const ids = (listings || []).map((l) => l.id);
@@ -64,7 +93,7 @@ function Inner() {
         const [{ data: e }, { data: ints }] = await Promise.all([
           supabase
             .from('listing_events')
-            .select('listing_id, tipo, created_at')
+            .select('listing_id, tipo')
             .in('listing_id', ids),
           supabase
             .from('interests')
@@ -94,12 +123,44 @@ function Inner() {
     setItems((arr) => arr.map((x) => (x.id === id ? { ...x, status: next } : x)));
   }
 
+  async function renew(id) {
+    const nowIso = new Date().toISOString();
+    await supabase
+      .from('listings')
+      .update({ created_at: nowIso, status: 'ativo' })
+      .eq('id', id);
+    setItems((arr) => arr.map((x) => x.id === id ? { ...x, created_at: nowIso, status: 'ativo' } : x));
+  }
+
+  async function confirmDelete(reasonId) {
+    if (!deleteFor) return;
+    const reason = DELETE_REASONS.find((r) => r.id === reasonId);
+    if (!reason) return;
+
+    if (reason.celebrate) {
+      setCelebrate(true);
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+
+    await supabase
+      .from('listings')
+      .update({
+        motivo_exclusao: reason.id,
+        deleted_at: new Date().toISOString(),
+        status: 'pausado',
+      })
+      .eq('id', deleteFor.id);
+
+    setItems((arr) => arr.filter((x) => x.id !== deleteFor.id));
+    setDeleteFor(null);
+    setCelebrate(false);
+  }
+
   const metricsByListing = useMemo(() => {
     const map = {};
     for (const ev of events) {
-      const m = (map[ev.listing_id] ||= { view: 0, interest: 0, pass: 0, save: 0, interestTimes: [] });
+      const m = (map[ev.listing_id] ||= { view: 0, interest: 0, pass: 0, save: 0 });
       m[ev.tipo] = (m[ev.tipo] || 0) + 1;
-      if (ev.tipo === 'interest') m.interestTimes.push(ev.created_at);
     }
     return map;
   }, [events]);
@@ -128,12 +189,6 @@ function Inner() {
                     <div className="skeleton h-5 w-1/3" />
                   </div>
                 </div>
-                <div className="mt-3 grid grid-cols-4 gap-2 border-t border-outline pt-3">
-                  <div className="skeleton h-8" />
-                  <div className="skeleton h-8" />
-                  <div className="skeleton h-8" />
-                  <div className="skeleton h-8" />
-                </div>
               </li>
             ))}
           </ul>
@@ -145,11 +200,10 @@ function Inner() {
           <ul className="space-y-3">
             {items.map((it) => {
               const status = STATUS_LABEL[it.status] || STATUS_LABEL.rascunho;
-              const m = metricsByListing[it.id] || { view: 0, interest: 0, pass: 0, save: 0, interestTimes: [] };
+              const m = metricsByListing[it.id] || { view: 0, interest: 0 };
               const uniqueInterests = interestCounts[it.id] || 0;
-              const conv = m.view > 0 ? Math.round((uniqueInterests / m.view) * 100) : 0;
-              const hot = uniqueInterests >= 10;
-              const buckets = bucketByDay(m.interestTimes, 7);
+              const exp = expirationInfo(it.created_at);
+              const expiringSoon = exp && !exp.expired && exp.daysLeft <= EXPIRATION_WARNING_DAYS;
 
               return (
                 <li key={it.id} className="card p-3">
@@ -159,14 +213,9 @@ function Inner() {
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={it.foto_principal_url} alt="" className="h-full w-full object-cover" />
                       )}
-                      {hot && (
-                        <span className="absolute left-1 top-1 rounded-md bg-brand-500 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-black">
-                          🔥 Hot
-                        </span>
-                      )}
                     </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-bold">{it.marca} {it.modelo}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold truncate">{it.marca} {it.modelo}</p>
                       <p className="text-xs text-slate-400">{it.ano} · {formatKm(it.km)}</p>
                       <p className="mt-1 font-display text-base font-black text-brand-500">{formatPrice(it.preco)}</p>
                     </div>
@@ -175,26 +224,44 @@ function Inner() {
                     </span>
                   </div>
 
-                  <div className="mt-3 grid grid-cols-4 gap-2 border-t border-outline pt-3 text-center">
-                    <Metric icon="👁️"  value={m.view} label="views" />
-                    <Metric icon="♥"   value={uniqueInterests} label="interesses" tone="brand" />
-                    <Metric icon="✕"   value={m.pass} label="passes" />
-                    <Metric icon="%"   value={`${conv}%`} label="conv." />
+                  <div className="mt-3 grid grid-cols-2 gap-2 border-t border-outline pt-3 text-center">
+                    <Metric icon="👁️" value={m.view} label="visualizações" />
+                    <Metric icon="♥"  value={uniqueInterests} label="interesses" tone="brand" />
                   </div>
 
-                  <div className="mt-3">
-                    <div className="mb-1 flex items-center justify-between">
-                      <span className="text-[10px] uppercase tracking-wide text-slate-400">interesses · 7 dias</span>
-                      <span className="text-[10px] text-slate-500">{m.interestTimes.length} eventos</span>
-                    </div>
-                    <Sparkline data={buckets} />
+                  <div className="mt-3 space-y-1 border-t border-outline pt-3 text-[11px] text-slate-400">
+                    <p>Anunciado em: <span className="text-slate-200">{formatDate(it.created_at)}</span></p>
+                    <p>
+                      Expira em: <span className="text-slate-200">{formatDate(exp?.expires)}</span>
+                      {exp?.expired && (
+                        <span className="ml-2 inline-block rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold uppercase text-red-300">
+                          Expirado
+                        </span>
+                      )}
+                      {expiringSoon && (
+                        <span className="ml-2 inline-block rounded-full bg-orange-500/20 px-2 py-0.5 text-[10px] font-bold uppercase text-orange-300">
+                          Expira em {exp.daysLeft} {exp.daysLeft === 1 ? 'dia' : 'dias'}
+                        </span>
+                      )}
+                    </p>
                   </div>
 
-                  <div className="mt-3 grid grid-cols-3 gap-2 border-t border-outline pt-3">
+                  {exp?.expired && (
+                    <button
+                      type="button"
+                      onClick={() => renew(it.id)}
+                      className="btn-primary mt-3 w-full py-2 text-xs"
+                    >
+                      Renovar anúncio
+                    </button>
+                  )}
+
+                  <div className="mt-3 grid grid-cols-2 gap-2 border-t border-outline pt-3">
                     <Link href={`/meus-anuncios/${it.id}/interessados`} className="btn-secondary py-2 text-xs">
                       Interessados
                     </Link>
                     <Link href={`/anuncio/${it.id}`} className="btn-secondary py-2 text-xs">Ver</Link>
+                    <Link href={`/editar/${it.id}`} className="btn-secondary py-2 text-xs">Editar</Link>
                     <button
                       type="button"
                       onClick={() => toggleStatus(it.id, it.status)}
@@ -203,12 +270,29 @@ function Inner() {
                       {it.status === 'ativo' ? 'Pausar' : 'Ativar'}
                     </button>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setDeleteFor(it)}
+                    className="mt-2 w-full rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs font-bold uppercase tracking-wide text-red-300 active:scale-[0.98]"
+                  >
+                    Excluir
+                  </button>
                 </li>
               );
             })}
           </ul>
         )}
       </div>
+
+      {deleteFor && (
+        <DeleteModal
+          listing={deleteFor}
+          celebrate={celebrate}
+          onClose={() => !celebrate && setDeleteFor(null)}
+          onConfirm={confirmDelete}
+        />
+      )}
     </>
   );
 }
@@ -221,6 +305,90 @@ function Metric({ icon, value, label, tone }) {
         {value}
       </div>
       <div className="text-[10px] uppercase tracking-wide text-slate-400">{label}</div>
+    </div>
+  );
+}
+
+function DeleteModal({ listing, celebrate, onClose, onConfirm }) {
+  const [selected, setSelected] = useState(null);
+
+  if (celebrate) {
+    return (
+      <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur">
+        <div className="card max-w-sm p-6 text-center">
+          <div className="text-5xl">🎉</div>
+          <h3 className="display mt-3 text-xl text-brand-500">Parabéns pela venda!</h3>
+          <p className="mt-2 text-sm text-slate-300">
+            Que bom que a SocialCar te ajudou a vender seu carro.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-end bg-black/70 p-0 backdrop-blur sm:place-items-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        className="card w-full max-w-md space-y-4 rounded-b-none rounded-t-2xl p-5 sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header>
+          <h3 className="display text-lg text-white">Por que você está removendo este anúncio?</h3>
+          <p className="mt-1 truncate text-xs text-slate-400">
+            {listing.marca} {listing.modelo} · {listing.ano}
+          </p>
+        </header>
+
+        <ul className="space-y-2">
+          {DELETE_REASONS.map((r) => (
+            <li key={r.id}>
+              <button
+                type="button"
+                onClick={() => setSelected(r.id)}
+                className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm font-semibold active:scale-[0.99] ${
+                  selected === r.id
+                    ? 'border-brand-500 bg-brand-500/10 text-white'
+                    : 'border-outline bg-page text-slate-200'
+                }`}
+              >
+                <span>{r.label}</span>
+                <span
+                  className={`grid h-5 w-5 place-items-center rounded-full border-2 ${
+                    selected === r.id ? 'border-brand-500 bg-brand-500 text-black' : 'border-outline'
+                  }`}
+                >
+                  {selected === r.id && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 12l5 5L20 7" />
+                    </svg>
+                  )}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <div className="flex gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-secondary flex-1"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={!selected}
+            onClick={() => onConfirm(selected)}
+            className="flex-1 rounded-xl bg-red-500 px-4 py-3 text-sm font-bold uppercase tracking-wide text-white active:scale-[0.98] disabled:opacity-40"
+          >
+            Confirmar exclusão
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
