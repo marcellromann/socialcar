@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import SwipeCard from './SwipeCard';
+import SwipeTutorial from './SwipeTutorial';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
@@ -244,6 +245,7 @@ export default function Feed({ initialListings = [] }) {
 
   return (
     <div className="page-pad">
+      <SwipeTutorial />
       <div className="relative h-[61vh] min-h-[420px] max-h-[calc(100dvh-var(--bottom-nav-h)-110px)] w-full">
         {empty ? (
           <EmptyState onReset={handleReset} canReset={initialListings.length > 0} />

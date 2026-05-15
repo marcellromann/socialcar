@@ -101,3 +101,15 @@ body {
   border-radius: 0.75rem;
   animation: skeleton-pulse 1.4s ease-in-out infinite;
 }
+
+/* Tutorial de swipe: setas se movem em loop para os lados */
+@keyframes swipe-hint-left {
+  0%, 100% { transform: translateX(0); }
+  50%      { transform: translateX(-10px); }
+}
+@keyframes swipe-hint-right {
+  0%, 100% { transform: translateX(0); }
+  50%      { transform: translateX(10px); }
+}
+.swipe-hint-left  { animation: swipe-hint-left  1.6s ease-in-out infinite; }
+.swipe-hint-right { animation: swipe-hint-right 1.6s ease-in-out infinite; }
