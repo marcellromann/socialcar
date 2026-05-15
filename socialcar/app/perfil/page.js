@@ -105,15 +105,7 @@ function Inner() {
         {/* Links rápidos */}
         <ul className="card divide-y divide-outline overflow-hidden">
           <Item href="/meus-anuncios" label="Meus anúncios" />
-          <Item
-            href="/salvos"
-            label="Salvos"
-            icon={
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M6 4h12v17l-6-4-6 4Z" />
-              </svg>
-            }
-          />
+          <Item href="/salvos" label="Salvos" />
           <Item href="/chats" label="Minhas conversas" />
           <Item href="/meus-dados" label="Meus dados" />
         </ul>
