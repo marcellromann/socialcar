@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { formatKm, formatPrice, simulatePayment } from '@/lib/format';
+import { formatKm, formatPrice } from '@/lib/format';
 import { isOnline, presenceLabel } from '@/lib/presence';
 import Gallery from '@/components/Gallery';
 import TopBar from '@/components/TopBar';
@@ -51,7 +51,6 @@ export default async function ListingDetailPage({ params }) {
   if (!listing) notFound();
   const seller = await fetchSeller(listing.user_id);
   const sellerOnline = isOnline(seller?.last_seen_at);
-  const sim = simulatePayment(listing.preco);
 
   return (
     <>
@@ -87,12 +86,6 @@ export default async function ListingDetailPage({ params }) {
           <div className="mt-1 font-display text-4xl font-black text-brand-500">
             {formatPrice(listing.preco)}
           </div>
-          {sim && (
-            <p className="mt-2 text-xs text-slate-400">
-              Entrada {formatPrice(sim.entrada)} +{' '}
-              <span className="font-semibold text-white">{sim.months}x de {formatPrice(sim.parcela)}</span>
-            </p>
-          )}
         </div>
 
         <div className="card p-4">
