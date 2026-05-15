@@ -102,14 +102,15 @@ body {
   animation: skeleton-pulse 1.4s ease-in-out infinite;
 }
 
-/* Tutorial de swipe: mãos se movem em loop para os lados */
-@keyframes swipe-hint-left {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-20px); }
+/* Tutorial de swipe: dedo desliza pra esquerda e pra direita em loop */
+@keyframes swipe-hint-finger {
+  0%   { transform: translateX(0);     opacity: 0.5; }
+  20%  { transform: translateX(-70px); opacity: 0;   }
+  21%  { transform: translateX(0);     opacity: 0;   }
+  40%  { transform: translateX(0);     opacity: 0.5; }
+  60%  { transform: translateX(70px);  opacity: 0;   }
+  61%  { transform: translateX(0);     opacity: 0;   }
+  80%  { transform: translateX(0);     opacity: 0.5; }
+  100% { transform: translateX(0);     opacity: 0.5; }
 }
-@keyframes swipe-hint-right {
-  from { transform: translateX(0); }
-  to   { transform: translateX(20px); }
-}
-.swipe-hint-left  { animation: swipe-hint-left  1.2s ease-in-out infinite alternate; }
-.swipe-hint-right { animation: swipe-hint-right 1.2s ease-in-out infinite alternate; }
+.swipe-hint-finger { animation: swipe-hint-finger 3.6s ease-in-out infinite; }
