@@ -65,6 +65,8 @@ export const FAIXAS_PRECO = [
   { id: '200k_300k', label: 'R$ 200–300 mil' },
   { id: '300k_500k', label: 'R$ 300–500 mil' },
   { id: 'acima_500k', label: 'acima de R$ 500 mil' },
+  { id: '500k_1M', label: 'R$ 500 mil – R$ 1 milhão' },
+  { id: 'acima_1M', label: 'Acima de R$ 1 milhão' },
 ];
 
 export const CATEGORIAS = [

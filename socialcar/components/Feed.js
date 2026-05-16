@@ -25,6 +25,8 @@ const PRICE_RANGE_CHECKS = {
   '200k_300k': (p) => p >= 200000 && p <= 300000,
   '300k_500k': (p) => p >= 300000 && p <= 500000,
   acima_500k:  (p) => p > 500000,
+  '500k_1M':   (p) => p >= 500000 && p <= 1000000,
+  acima_1M:    (p) => p > 1000000,
 };
 
 function priceInFaixa(preco, faixa) {
