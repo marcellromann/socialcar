@@ -125,8 +125,8 @@ function getFieldErrors(form) {
   }
   if (form.descricao) {
     if (form.descricao.length > 400) e.descricao = 'Máximo 400 caracteres.';
-    else if (form.descricao.trim().length < 30)
-      e.descricao = 'Descrição muito curta. Mínimo 30 caracteres.';
+    else if (form.descricao.trim().length < 50)
+      e.descricao = 'Descrição muito curta. Mínimo 50 caracteres.';
   }
   return e;
 }
@@ -908,6 +908,24 @@ function Step3Photos({ previews, mainIdx, setMainIdx, handleFiles, removeFile })
           Mínimo {MIN_PHOTOS}, máximo {MAX_PHOTOS}. Toque numa foto para marcar como principal.
         </p>
       </header>
+
+      <div
+        className="flex items-start gap-2"
+        style={{
+          background: 'rgba(239, 159, 39, 0.1)',
+          border: '1px solid rgba(239, 159, 39, 0.3)',
+          color: 'rgba(239, 159, 39, 0.9)',
+          borderRadius: '10px',
+          padding: '12px 14px',
+          fontSize: '13px',
+        }}
+      >
+        <span aria-hidden>⚠️</span>
+        <span>
+          Verifique a qualidade das fotos antes de enviar. Anúncios com fotos escuras,
+          borradas ou de baixa qualidade poderão ser removidos.
+        </span>
+      </div>
 
       <label className="grid cursor-pointer place-items-center gap-1 rounded-2xl border-2 border-dashed border-outline bg-page py-8 text-center hover:border-brand-500/50">
         <span className="text-sm font-medium text-slate-200">Selecionar fotos</span>
