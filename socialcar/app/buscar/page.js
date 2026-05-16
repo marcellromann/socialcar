@@ -17,8 +17,9 @@ export default function BuscarPage() {
       setLoading(true);
       const base = supabase
         .from('listings_public')
-        .select('id, marca, modelo, ano, km, preco, foto_principal_url, cidade, estado, verificado')
+        .select('id, marca, modelo, ano, km, preco, foto_principal_url, cidade, estado, verificado, destaque, destaque_expira_em')
         .eq('status', 'ativo')
+        .order('destaque', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(40);
       const { data, error } = await base;
@@ -26,7 +27,8 @@ export default function BuscarPage() {
       if (error) {
         const fb = await supabase
           .from('listings')
-          .select('id, marca, modelo, ano, km, preco, foto_principal_url, cidade, estado, verificado')
+          .select('id, marca, modelo, ano, km, preco, foto_principal_url, cidade, estado, verificado, destaque, destaque_expira_em')
+          .order('destaque', { ascending: false })
           .order('created_at', { ascending: false }).limit(40);
         rows = fb.data;
       }
@@ -64,23 +66,34 @@ export default function BuscarPage() {
           </p>
         ) : (
           <ul className="grid grid-cols-2 gap-3">
-            {filtered.map((it) => (
-              <li key={it.id}>
-                <Link href={`/anuncio/${it.id}`} className="block overflow-hidden rounded-xl border border-outline bg-card active:bg-elevated">
-                  <div className="aspect-[4/3] bg-elevated">
-                    {it.foto_principal_url && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={it.foto_principal_url} alt="" className="h-full w-full object-cover" />
-                    )}
-                  </div>
-                  <div className="p-2">
-                    <p className="truncate text-xs font-bold text-white">{it.marca} {it.modelo}</p>
-                    <p className="truncate text-[11px] text-slate-400">{it.ano} · {formatKm(it.km)}</p>
-                    <p className="mt-1 font-display text-sm font-black text-brand-500">{formatPrice(it.preco)}</p>
-                  </div>
-                </Link>
-              </li>
-            ))}
+            {filtered.map((it) => {
+              const destAtivo =
+                !!it.destaque &&
+                !!it.destaque_expira_em &&
+                new Date(it.destaque_expira_em) > new Date();
+              return (
+                <li key={it.id}>
+                  <Link href={`/anuncio/${it.id}`} className="block overflow-hidden rounded-xl border border-outline bg-card active:bg-elevated">
+                    <div className="relative aspect-[4/3] bg-elevated">
+                      {it.foto_principal_url && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={it.foto_principal_url} alt="" className="h-full w-full object-cover" />
+                      )}
+                      {destAtivo && (
+                        <span className="absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-brand-500 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-black">
+                          ⭐ Destaque
+                        </span>
+                      )}
+                    </div>
+                    <div className="p-2">
+                      <p className="truncate text-xs font-bold text-white">{it.marca} {it.modelo}</p>
+                      <p className="truncate text-[11px] text-slate-400">{it.ano} · {formatKm(it.km)}</p>
+                      <p className="mt-1 font-display text-sm font-black text-brand-500">{formatPrice(it.preco)}</p>
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

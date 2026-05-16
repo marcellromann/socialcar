@@ -56,6 +56,10 @@ export default function SwipeCard({ listing, onSwipe, depth = 0, userEstado = nu
       : `translate3d(0, ${depth * 8}px, 0) scale(${1 - depth * 0.04})`;
 
   const nearby = !!userEstado && !!listing.estado && listing.estado === userEstado;
+  const destaqueAtivo =
+    !!listing.destaque &&
+    !!listing.destaque_expira_em &&
+    new Date(listing.destaque_expira_em) > new Date();
 
   return (
     <div
@@ -85,6 +89,13 @@ export default function SwipeCard({ listing, onSwipe, depth = 0, userEstado = nu
         ) : (
           <div className="grid h-full w-full place-items-center bg-elevated text-slate-500">
             sem foto
+          </div>
+        )}
+
+        {destaqueAtivo && (
+          <div className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-brand-500 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-black shadow-lg shadow-brand-500/30">
+            <span>⭐</span>
+            <span>Destaque</span>
           </div>
         )}
 

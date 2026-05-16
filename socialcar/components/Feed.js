@@ -8,8 +8,13 @@ import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
 const FEED_FIELDS =
-  'id, user_id, marca, modelo, ano, versao, km, preco, cidade, estado, foto_principal_url, verificado, created_at';
+  'id, user_id, marca, modelo, ano, versao, km, preco, cidade, estado, foto_principal_url, verificado, created_at, destaque, destaque_expira_em';
 const PAGE_SIZE = 20;
+
+function destaqueAtivo(listing) {
+  if (!listing?.destaque || !listing?.destaque_expira_em) return false;
+  return new Date(listing.destaque_expira_em) > new Date();
+}
 
 // Faixas de preço do buyer_profile → predicado sobre `preco`.
 const PRICE_RANGE_CHECKS = {
@@ -39,11 +44,16 @@ function listingTier(listing, profile) {
 }
 
 function sortByProfile(listings, profile) {
-  if (!profile || (!profile.estado && !profile.faixa_preco)) return listings;
+  const hasProfile = profile && (profile.estado || profile.faixa_preco);
   return [...listings].sort((a, b) => {
-    const ta = listingTier(a, profile);
-    const tb = listingTier(b, profile);
-    if (ta !== tb) return ta - tb;
+    const da_ = destaqueAtivo(a) ? 1 : 0;
+    const db_ = destaqueAtivo(b) ? 1 : 0;
+    if (da_ !== db_) return db_ - da_;
+    if (hasProfile) {
+      const ta = listingTier(a, profile);
+      const tb = listingTier(b, profile);
+      if (ta !== tb) return ta - tb;
+    }
     const da = a.created_at || '';
     const db = b.created_at || '';
     if (db > da) return 1;

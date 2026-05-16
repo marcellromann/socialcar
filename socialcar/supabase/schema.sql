@@ -154,6 +154,14 @@ end $$;
 alter table public.listings add column if not exists motivo_exclusao text;
 alter table public.listings add column if not exists deleted_at      timestamptz;
 
+-- Destaque (monetização): plano '7dias' ou '15dias', expira em data fixa.
+alter table public.listings add column if not exists destaque            boolean not null default false;
+alter table public.listings add column if not exists destaque_expira_em  timestamptz;
+alter table public.listings add column if not exists destaque_plano      text;
+
+create index if not exists listings_destaque_idx
+  on public.listings (destaque, destaque_expira_em desc);
+
 -- ----------------------------------------------------------------------------
 -- LISTING_PHOTOS (galeria de fotos de cada anúncio)
 -- Limite por anúncio: mínimo 3, máximo 15 (validado no frontend).
@@ -286,7 +294,8 @@ create or replace view public.listings_public as
   select
     id, user_id, marca, modelo, ano, versao, km, preco, combustivel, cambio,
     cor, descricao, acessorios, cidade, estado, foto_principal_url,
-    status, verificado, created_at, updated_at
+    status, verificado, created_at, updated_at,
+    destaque, destaque_expira_em, destaque_plano
   from public.listings
   where deleted_at is null;
 

@@ -5,13 +5,14 @@ import TopBar from '@/components/TopBar';
 export const revalidate = 0;
 
 const FEED_FIELDS =
-  'id, user_id, marca, modelo, ano, versao, km, preco, cidade, estado, foto_principal_url, verificado, created_at';
+  'id, user_id, marca, modelo, ano, versao, km, preco, cidade, estado, foto_principal_url, verificado, created_at, destaque, destaque_expira_em';
 
 async function fetchFeed() {
   const { data, error } = await supabase
     .from('listings_public')
     .select(FEED_FIELDS)
     .eq('status', 'ativo')
+    .order('destaque', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(30);
 
@@ -20,6 +21,7 @@ async function fetchFeed() {
     const fb = await supabase
       .from('listings')
       .select(FEED_FIELDS)
+      .order('destaque', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(30);
     listings = fb.data ?? [];

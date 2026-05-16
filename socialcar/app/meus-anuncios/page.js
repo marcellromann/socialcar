@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import RequireAuth from '@/components/RequireAuth';
 import TopBar from '@/components/TopBar';
+import DestaqueModal from '@/components/DestaqueModal';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { formatKm, formatPrice } from '@/lib/format';
@@ -43,6 +44,13 @@ function expirationInfo(createdAt) {
   return { expires, daysLeft, expired: daysLeft <= 0 };
 }
 
+function destaqueInfo(listing) {
+  if (!listing?.destaque || !listing?.destaque_expira_em) return null;
+  const expires = new Date(listing.destaque_expira_em);
+  const now = new Date();
+  return { expires, expired: expires <= now };
+}
+
 export default function MeusAnunciosPage() {
   return (
     <RequireAuth>
@@ -64,6 +72,7 @@ function Inner() {
   );
   const [deleteFor, setDeleteFor] = useState(null);
   const [celebrate, setCelebrate] = useState(false);
+  const [destaqueFor, setDestaqueFor] = useState(null);
 
   useEffect(() => {
     if (searchParams.get('published') !== '1') return;
@@ -204,6 +213,9 @@ function Inner() {
               const uniqueInterests = interestCounts[it.id] || 0;
               const exp = expirationInfo(it.created_at);
               const expiringSoon = exp && !exp.expired && exp.daysLeft <= EXPIRATION_WARNING_DAYS;
+              const dest = destaqueInfo(it);
+              const destaqueAtivo = dest && !dest.expired;
+              const destaqueExpirado = dest && dest.expired;
 
               return (
                 <li key={it.id} className="card p-3">
@@ -223,6 +235,35 @@ function Inner() {
                       {status.label}
                     </span>
                   </div>
+
+                  {destaqueAtivo && (
+                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-brand-500/40 bg-brand-500/10 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-brand-500">
+                      <span>⭐</span>
+                      <span>Em destaque até {formatDate(dest.expires)}</span>
+                    </div>
+                  )}
+                  {destaqueExpirado && (
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-outline bg-elevated px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-300">
+                      <span>Destaque expirado</span>
+                      <button
+                        type="button"
+                        onClick={() => setDestaqueFor(it)}
+                        className="rounded-full bg-brand-500 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-black active:scale-95"
+                      >
+                        Renovar destaque
+                      </button>
+                    </div>
+                  )}
+                  {!dest && (
+                    <button
+                      type="button"
+                      onClick={() => setDestaqueFor(it)}
+                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-brand-500/40 bg-brand-500/10 px-4 py-2 text-xs font-bold uppercase tracking-wide text-brand-500 active:scale-[0.98]"
+                    >
+                      <span>⭐</span>
+                      <span>Destacar anúncio</span>
+                    </button>
+                  )}
 
                   <div className="mt-3 grid grid-cols-2 gap-2 border-t border-outline pt-3 text-center">
                     <Metric icon="👁️" value={m.view} label="visualizações" />
@@ -291,6 +332,13 @@ function Inner() {
           celebrate={celebrate}
           onClose={() => !celebrate && setDeleteFor(null)}
           onConfirm={confirmDelete}
+        />
+      )}
+
+      {destaqueFor && (
+        <DestaqueModal
+          listing={destaqueFor}
+          onClose={() => setDestaqueFor(null)}
         />
       )}
     </>
