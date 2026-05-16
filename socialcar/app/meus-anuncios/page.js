@@ -9,6 +9,7 @@ import DestaqueModal from '@/components/DestaqueModal';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { formatKm, formatPrice } from '@/lib/format';
+import { computeVerification } from '@/lib/verification';
 
 const STATUS_LABEL = {
   rascunho: { label: 'Rascunho', color: 'bg-slate-500/20 text-slate-300' },
@@ -66,6 +67,8 @@ function Inner() {
   const [items, setItems] = useState([]);
   const [events, setEvents] = useState([]);
   const [interestCounts, setInterestCounts] = useState({});
+  const [photoCounts, setPhotoCounts] = useState({});
+  const [expandedChecks, setExpandedChecks] = useState({});
   const [loading, setLoading] = useState(true);
   const [successMsg, setSuccessMsg] = useState(
     searchParams.get('published') === '1' ? 'Anúncio publicado com sucesso!' : ''
@@ -98,8 +101,9 @@ function Inner() {
       const ids = (listings || []).map((l) => l.id);
       let evs = [];
       let interests = [];
+      let photos = [];
       if (ids.length) {
-        const [{ data: e }, { data: ints }] = await Promise.all([
+        const [{ data: e }, { data: ints }, { data: ph }] = await Promise.all([
           supabase
             .from('listing_events')
             .select('listing_id, tipo')
@@ -108,18 +112,26 @@ function Inner() {
             .from('interests')
             .select('listing_id, buyer_id')
             .in('listing_id', ids),
+          supabase
+            .from('listing_photos')
+            .select('listing_id')
+            .in('listing_id', ids),
         ]);
         evs = e || [];
         interests = ints || [];
+        photos = ph || [];
       }
 
       const ic = {};
       for (const i of interests) ic[i.listing_id] = (ic[i.listing_id] || 0) + 1;
+      const pc = {};
+      for (const p of photos) pc[p.listing_id] = (pc[p.listing_id] || 0) + 1;
 
       if (!cancel) {
         setItems(listings || []);
         setEvents(evs);
         setInterestCounts(ic);
+        setPhotoCounts(pc);
         setLoading(false);
       }
     })();
@@ -216,6 +228,13 @@ function Inner() {
               const dest = destaqueInfo(it);
               const destaqueAtivo = dest && !dest.expired;
               const destaqueExpirado = dest && dest.expired;
+              const fotosCount = photoCounts[it.id] || (it.foto_principal_url ? 1 : 0);
+              const verification = computeVerification(it, {
+                placaUnica: true,
+                fotosCount,
+                temFotoPrincipal: !!it.foto_principal_url,
+              });
+              const showChecks = !!expandedChecks[it.id];
 
               return (
                 <li key={it.id} className="card p-3">
@@ -264,6 +283,59 @@ function Inner() {
                       <span>Destacar anúncio</span>
                     </button>
                   )}
+
+                  <div className="mt-3 border-t border-outline pt-3">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedChecks((s) => ({ ...s, [it.id]: !s[it.id] }))}
+                      className="flex w-full items-center justify-between gap-2 text-left"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        {verification.passed ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-brand-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-500">
+                            ✓ Verificado
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-300">
+                            Não verificado
+                          </span>
+                        )}
+                        <span className="text-[11px] text-slate-400">
+                          {verification.checks.filter((c) => c.passed).length}/{verification.checks.length} critérios
+                        </span>
+                      </span>
+                      <span className="text-[11px] font-bold uppercase tracking-wide text-brand-500">
+                        {showChecks ? 'Ocultar' : 'Detalhes'}
+                      </span>
+                    </button>
+
+                    {showChecks && (
+                      <ul className="mt-2 space-y-1">
+                        {verification.checks.map((c) => (
+                          <li key={c.id} className="flex items-start gap-2 text-[12px]">
+                            <span className={c.passed ? 'text-brand-500' : 'text-red-400'}>
+                              {c.passed ? '✓' : '✗'}
+                            </span>
+                            <span className={c.passed ? 'text-slate-300' : 'text-slate-200'}>
+                              {c.label}
+                              {!c.passed && c.hint && (
+                                <span className="block text-[11px] text-slate-400">{c.hint}</span>
+                              )}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {!verification.passed && (
+                      <Link
+                        href={`/editar/${it.id}`}
+                        className="btn-primary mt-3 w-full py-2 text-xs"
+                      >
+                        Completar anúncio
+                      </Link>
+                    )}
+                  </div>
 
                   <div className="mt-3 grid grid-cols-2 gap-2 border-t border-outline pt-3 text-center">
                     <Metric icon="👁️" value={m.view} label="visualizações" />

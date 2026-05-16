@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { PHOTOS_BUCKET, supabase } from '@/lib/supabase';
 import { hashPlate, isValidPlate, maskPlate, normalizePlate } from '@/lib/plate';
 import { useAuth } from '@/lib/auth';
+import { computeVerification } from '@/lib/verification';
 import {
   MARCAS_FIPE,
   MODELOS_POR_MARCA,
@@ -358,13 +359,10 @@ export default function ListingForm() {
       const versaoCombinada =
         [form.motorizacao.trim(), form.versao.trim()].filter(Boolean).join(' ') || null;
 
-      const insertPayload = {
-        user_id: userData.id,
-        placa_hash,
+      const listingShape = {
         marca: form.marca.trim(),
         modelo: form.modelo.trim(),
         ano: Number(form.ano),
-        versao: versaoCombinada,
         km: Number(form.km),
         preco: Number(form.preco),
         combustivel: form.combustivel || null,
@@ -374,8 +372,22 @@ export default function ListingForm() {
         estado: form.estado || null,
         descricao: form.descricao.trim() || null,
         foto_principal_url: main,
+      };
+
+      const verification = computeVerification(listingShape, {
+        placa: placaNorm,
+        placaUnica: true,
+        fotosCount: photoUrls.length,
+        temFotoPrincipal: !!main,
+      });
+
+      const insertPayload = {
+        ...listingShape,
+        user_id: userData.id,
+        placa_hash,
+        versao: versaoCombinada,
         status: 'ativo',
-        verificado: true,
+        verificado: verification.passed,
       };
 
       console.log('[ListingForm] userData.id (public.users) =', userData.id);
@@ -410,7 +422,12 @@ export default function ListingForm() {
       }));
       await supabase.from('listing_photos').insert(photoRows);
 
-      router.push('/meus-anuncios?published=1');
+      const params = new URLSearchParams({ published: '1' });
+      if (!verification.passed) {
+        const failed = verification.checks.filter((c) => !c.passed).map((c) => c.id).join(',');
+        params.set('unverified', failed);
+      }
+      router.push(`/meus-anuncios?${params.toString()}`);
       router.refresh();
     } catch (err) {
       setError(err.message || 'Erro inesperado.');
