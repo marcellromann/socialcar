@@ -6,6 +6,7 @@ import { PHOTOS_BUCKET, supabase } from '@/lib/supabase';
 import { hashPlate, isValidPlate, maskPlate, normalizePlate } from '@/lib/plate';
 import { useAuth } from '@/lib/auth';
 import { computeVerification } from '@/lib/verification';
+import { DESTAQUE_PLANOS } from '@/components/DestaqueModal';
 import {
   MARCAS_FIPE,
   MODELOS_POR_MARCA,
@@ -159,6 +160,8 @@ export default function ListingForm() {
   const [marcaCustom, setMarcaCustom] = useState(false);
   const [modeloCustom, setModeloCustom] = useState(false);
   const [motorizacaoCustom, setMotorizacaoCustom] = useState(false);
+  const [destaquePlano, setDestaquePlano] = useState(null);
+  const [submittingPath, setSubmittingPath] = useState(null); // null | 'destaque' | 'free'
 
   const previews = useMemo(
     () => files.map((f) => ({ name: f.name, url: URL.createObjectURL(f) })),
@@ -332,9 +335,10 @@ export default function ListingForm() {
   }
 
   // ─── Submissão final ───────────────────────────────────────────────────────
-  async function onSubmit() {
+  async function onSubmit(planoId = null) {
     setError(null);
     setSubmitting(true);
+    setSubmittingPath(planoId ? 'destaque' : 'free');
     try {
       // Lookup explícito do user_id interno (não confia só no contexto)
       const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -381,6 +385,15 @@ export default function ListingForm() {
         temFotoPrincipal: !!main,
       });
 
+      const plano = planoId ? DESTAQUE_PLANOS[planoId] : null;
+      const destaqueFields = plano
+        ? {
+            destaque: true,
+            destaque_plano: planoId,
+            destaque_expira_em: new Date(Date.now() + plano.dias * 24 * 60 * 60 * 1000).toISOString(),
+          }
+        : {};
+
       const insertPayload = {
         ...listingShape,
         user_id: userData.id,
@@ -388,6 +401,7 @@ export default function ListingForm() {
         versao: versaoCombinada,
         status: 'ativo',
         verificado: verification.passed,
+        ...destaqueFields,
       };
 
       console.log('[ListingForm] userData.id (public.users) =', userData.id);
@@ -422,16 +436,21 @@ export default function ListingForm() {
       }));
       await supabase.from('listing_photos').insert(photoRows);
 
-      const params = new URLSearchParams({ published: '1' });
-      if (!verification.passed) {
-        const failed = verification.checks.filter((c) => !c.passed).map((c) => c.id).join(',');
-        params.set('unverified', failed);
+      if (planoId) {
+        router.push(`/pagamento?listing=${listingId}&plano=${planoId}`);
+      } else {
+        const params = new URLSearchParams({ published: '1' });
+        if (!verification.passed) {
+          const failed = verification.checks.filter((c) => !c.passed).map((c) => c.id).join(',');
+          params.set('unverified', failed);
+        }
+        router.push(`/meus-anuncios?${params.toString()}`);
       }
-      router.push(`/meus-anuncios?${params.toString()}`);
       router.refresh();
     } catch (err) {
       setError(err.message || 'Erro inesperado.');
       setSubmitting(false);
+      setSubmittingPath(null);
     }
   }
 
@@ -492,7 +511,18 @@ export default function ListingForm() {
         />
       )}
 
-      {step === 4 && <Step4Review form={form} previews={previews} mainIdx={mainIdx} />}
+      {step === 4 && (
+        <Step4Review
+          form={form}
+          previews={previews}
+          mainIdx={mainIdx}
+          destaquePlano={destaquePlano}
+          setDestaquePlano={setDestaquePlano}
+          submitting={submitting}
+          submittingPath={submittingPath}
+          onPublish={(planoId) => onSubmit(planoId)}
+        />
+      )}
 
       {error && (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
@@ -529,16 +559,6 @@ export default function ListingForm() {
         {step === 3 && (
           <button type="button" onClick={goNext} className="btn-primary flex-1">
             Continuar
-          </button>
-        )}
-        {step === 4 && (
-          <button
-            type="button"
-            onClick={onSubmit}
-            className="btn-primary flex-1"
-            disabled={submitting}
-          >
-            {submitting ? 'Publicando…' : 'Publicar anúncio'}
           </button>
         )}
       </div>
@@ -992,48 +1012,122 @@ function Step3Photos({ previews, mainIdx, setMainIdx, handleFiles, removeFile })
 }
 
 // ─── Step 4 ──────────────────────────────────────────────────────────────────
-function Step4Review({ form, previews, mainIdx }) {
+function Step4Review({
+  form,
+  previews,
+  mainIdx,
+  destaquePlano,
+  setDestaquePlano,
+  submitting,
+  submittingPath,
+  onPublish,
+}) {
   const main = previews[mainIdx] || previews[0];
 
   return (
-    <section className="card space-y-4 p-4">
-      <header>
-        <h2 className="display text-base text-white">Revisar e publicar</h2>
-        <p className="text-xs text-slate-400">Confira as informações antes de enviar.</p>
-      </header>
+    <div className="space-y-4">
+      <section className="card space-y-4 p-4">
+        <header>
+          <h2 className="display text-base text-white">Revisar e publicar</h2>
+          <p className="text-xs text-slate-400">Confira as informações antes de enviar.</p>
+        </header>
 
-      {main && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={main.url}
-          alt="Foto principal"
-          className="aspect-video w-full rounded-xl border border-outline object-cover"
-        />
-      )}
+        {main && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={main.url}
+            alt="Foto principal"
+            className="aspect-video w-full rounded-xl border border-outline object-cover"
+          />
+        )}
 
-      <dl className="grid grid-cols-2 gap-y-2 text-sm">
-        <ReviewItem label="Marca" value={form.marca} />
-        <ReviewItem label="Modelo" value={form.modelo} />
-        <ReviewItem label="Motorização" value={form.motorizacao} />
-        <ReviewItem label="Versão" value={form.versao} />
-        <ReviewItem label="Ano" value={form.ano} />
-        <ReviewItem label="KM" value={form.km && Number(form.km).toLocaleString('pt-BR')} />
-        <ReviewItem label="Combustível" value={form.combustivel} />
-        <ReviewItem label="Câmbio" value={form.cambio} />
-        <ReviewItem label="Cor" value={form.cor} />
-        <ReviewItem label="Cidade" value={form.cidade} />
-        <ReviewItem label="Estado" value={form.estado} />
-        <ReviewItem label="Preço" value={formatBRL(form.preco)} highlight />
-        <ReviewItem label="Fotos" value={`${previews.length}`} />
-      </dl>
+        <dl className="grid grid-cols-2 gap-y-2 text-sm">
+          <ReviewItem label="Marca" value={form.marca} />
+          <ReviewItem label="Modelo" value={form.modelo} />
+          <ReviewItem label="Motorização" value={form.motorizacao} />
+          <ReviewItem label="Versão" value={form.versao} />
+          <ReviewItem label="Ano" value={form.ano} />
+          <ReviewItem label="KM" value={form.km && Number(form.km).toLocaleString('pt-BR')} />
+          <ReviewItem label="Combustível" value={form.combustivel} />
+          <ReviewItem label="Câmbio" value={form.cambio} />
+          <ReviewItem label="Cor" value={form.cor} />
+          <ReviewItem label="Cidade" value={form.cidade} />
+          <ReviewItem label="Estado" value={form.estado} />
+          <ReviewItem label="Preço" value={formatBRL(form.preco)} highlight />
+          <ReviewItem label="Fotos" value={`${previews.length}`} />
+        </dl>
 
-      {form.descricao && (
-        <div>
-          <p className="label">Descrição</p>
-          <p className="text-sm text-slate-200 whitespace-pre-wrap">{form.descricao}</p>
+        {form.descricao && (
+          <div>
+            <p className="label">Descrição</p>
+            <p className="text-sm text-slate-200 whitespace-pre-wrap">{form.descricao}</p>
+          </div>
+        )}
+      </section>
+
+      <section className="card relative space-y-3 p-4" style={{ border: '1px solid #AAFF00' }}>
+        <span className="absolute -top-2 left-4 inline-flex items-center gap-1 rounded-full bg-brand-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-black">
+          ⭐ Recomendado
+        </span>
+        <header className="pt-1">
+          <h3 className="display text-base text-white">Publicar com Destaque</h3>
+          <p className="text-xs text-slate-400">Apareça primeiro no feed e venda mais rápido</p>
+        </header>
+
+        <div className="grid grid-cols-2 gap-2">
+          {Object.entries(DESTAQUE_PLANOS).map(([id, plano]) => {
+            const selected = destaquePlano === id;
+            const popular = id === '15dias';
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setDestaquePlano(id)}
+                className={`relative rounded-xl border px-3 py-3 text-center active:scale-[0.99] ${
+                  selected ? 'border-brand-500 bg-brand-500/10' : 'border-outline bg-page'
+                }`}
+              >
+                {popular && (
+                  <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full border border-brand-500/50 bg-page px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-brand-500">
+                    Mais popular
+                  </span>
+                )}
+                <p className={`text-xs font-bold uppercase tracking-wide ${selected ? 'text-brand-500' : 'text-slate-200'}`}>
+                  {plano.label}
+                </p>
+                <p className="mt-1 font-display text-base font-black text-brand-500">
+                  {plano.precoLabel}
+                </p>
+              </button>
+            );
+          })}
         </div>
-      )}
-    </section>
+
+        <button
+          type="button"
+          onClick={() => onPublish(destaquePlano)}
+          disabled={!destaquePlano || submitting}
+          className="btn-primary w-full"
+        >
+          {submittingPath === 'destaque' ? 'Publicando…' : 'Publicar com Destaque'}
+        </button>
+      </section>
+
+      <section className="card space-y-3 p-4">
+        <header>
+          <h3 className="display text-base text-white">Publicar sem destaque</h3>
+          <p className="text-xs text-slate-400">Seu anúncio aparecerá no feed normalmente</p>
+        </header>
+        <button
+          type="button"
+          onClick={() => onPublish(null)}
+          disabled={submitting}
+          className="btn-secondary w-full"
+        >
+          {submittingPath === 'free' ? 'Publicando…' : 'Publicar gratuitamente'}
+        </button>
+      </section>
+    </div>
   );
 }
 
