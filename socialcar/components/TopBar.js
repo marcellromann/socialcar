@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import Logo from './Logo';
 import { getInitials, useAuth } from '@/lib/auth';
 
 export default function TopBar({ title, back, right, hideAuth = false }) {
@@ -24,7 +23,9 @@ export default function TopBar({ title, back, right, hideAuth = false }) {
             </svg>
           </button>
         ) : (
-          <Logo size="sm" />
+          <Link href="/" aria-label="SocialCar" className="flex items-center">
+            <img src="/logosocialcar.png" alt="SocialCar" style={{ height: '36px', width: 'auto' }} />
+          </Link>
         )}
       </div>
 
