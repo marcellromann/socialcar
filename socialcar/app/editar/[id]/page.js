@@ -216,8 +216,7 @@ function Inner() {
       const { error: upErr } = await supabase
         .from('listings')
         .update(payload)
-        .eq('id', id)
-        .eq('user_id', appUser.id);
+        .eq('id', id);
       if (upErr) throw new Error(upErr.message);
       router.push('/meus-anuncios');
       router.refresh();
