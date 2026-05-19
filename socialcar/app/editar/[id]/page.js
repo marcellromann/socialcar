@@ -212,7 +212,8 @@ function Inner() {
         updated_at: new Date().toISOString(),
       };
       console.log('cambio sendo enviado:', form.cambio);
-      console.log('payload completo:', payload);
+      console.log('cambio no payload:', payload.cambio);
+      console.log('todos os valores do payload:', JSON.stringify(payload));
       const { error: upErr } = await supabase
         .from('listings')
         .update(payload)
