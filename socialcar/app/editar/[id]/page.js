@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import RequireAuth from '@/components/RequireAuth';
 import TopBar from '@/components/TopBar';
 import { useAuth } from '@/lib/auth';
-import { supabase } from '@/lib/supabase';
+import { PHOTOS_BUCKET, supabase } from '@/lib/supabase';
 import {
   MARCAS_FIPE,
   MODELOS_POR_MARCA,
@@ -24,6 +24,26 @@ const REQUIRED = [
   'marca','modelo','motorizacao','ano','km',
   'combustivel','cambio','cor','cidade','estado','preco','descricao',
 ];
+
+const MAX_PHOTOS = 15;
+const MIN_PHOTOS = 3;
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+
+function slugify(name) {
+  return String(name)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9.]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function extractStoragePath(url) {
+  if (!url) return null;
+  const marker = `/${PHOTOS_BUCKET}/`;
+  const i = url.indexOf(marker);
+  return i === -1 ? null : url.slice(i + marker.length);
+}
 
 export default function EditarAnuncioPage() {
   return (
@@ -100,22 +120,36 @@ function Inner() {
   const [modeloCustom, setModeloCustom] = useState(false);
   const [motorizacaoCustom, setMotorizacaoCustom] = useState(false);
 
+  // Fotos
+  const [existingPhotos, setExistingPhotos] = useState([]); // [{ id, url, ordem }]
+  const [removedExistingIds, setRemovedExistingIds] = useState([]); // [id]
+  const [newPhotos, setNewPhotos] = useState([]); // [{ key, file, previewUrl }]
+  const [mainKey, setMainKey] = useState(null); // 'existing:<id>' | 'new:<key>'
+  const [photoError, setPhotoError] = useState(null);
+  const newPreviewsRef = useRef([]);
+
   useEffect(() => {
     if (!appUser?.id || !id) return;
     let cancel = false;
     (async () => {
       setLoading(true);
-      const { data: listing, error: fetchErr } = await supabase
-        .from('listings')
-        .select('*')
-        .eq('id', id)
-        .single();
+      const [{ data: listing, error: fetchErr }, { data: photos }] = await Promise.all([
+        supabase.from('listings').select('*').eq('id', id).single(),
+        supabase.from('listing_photos').select('id, url, ordem').eq('listing_id', id).order('ordem'),
+      ]);
       if (cancel) return;
       if (fetchErr || !listing || listing.user_id !== appUser.id) {
         setNotFound(true);
         setLoading(false);
         return;
       }
+      const loadedPhotos = (photos || []).map((p) => ({ id: p.id, url: p.url, ordem: p.ordem }));
+      setExistingPhotos(loadedPhotos);
+      setRemovedExistingIds([]);
+      setNewPhotos([]);
+      const principal = loadedPhotos.find((p) => p.url === listing.foto_principal_url)
+        || loadedPhotos[0];
+      setMainKey(principal ? `existing:${principal.id}` : null);
       const { motorizacao, versao } = splitVersao(listing.versao);
       const cap = (s) => (s ? capitalizeWords(s) : '');
       const knownMarca = MARCAS_FIPE.some((m) => m.nome === listing.marca);
@@ -189,11 +223,153 @@ function Inner() {
     setForm((f) => ({ ...f, motorizacao: value }));
   }
 
+  // ─── Fotos ─────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      newPreviewsRef.current.forEach((u) => {
+        try { URL.revokeObjectURL(u); } catch {}
+      });
+    };
+  }, []);
+
+  const visibleExisting = existingPhotos.filter((p) => !removedExistingIds.includes(p.id));
+  const totalPhotos = visibleExisting.length + newPhotos.length;
+  const photosOk = totalPhotos >= MIN_PHOTOS && totalPhotos <= MAX_PHOTOS;
+
+  function handleFilesPick(e) {
+    setPhotoError(null);
+    const incoming = Array.from(e.target.files || []);
+    const accepted = [];
+    for (const file of incoming) {
+      if (!file.type.startsWith('image/')) continue;
+      if (file.size > MAX_PHOTO_BYTES) {
+        setPhotoError(`A foto "${file.name}" passa de 5MB e foi ignorada.`);
+        continue;
+      }
+      accepted.push(file);
+    }
+    setNewPhotos((prev) => {
+      let merged = [...prev];
+      for (const file of accepted) {
+        if (visibleExisting.length + merged.length >= MAX_PHOTOS) {
+          setPhotoError(`Máximo de ${MAX_PHOTOS} fotos atingido.`);
+          break;
+        }
+        const key = (typeof crypto !== 'undefined' && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random()}`;
+        const previewUrl = URL.createObjectURL(file);
+        newPreviewsRef.current.push(previewUrl);
+        merged.push({ key, file, previewUrl });
+      }
+      return merged;
+    });
+    e.target.value = '';
+  }
+
+  function removeExistingPhoto(photoId) {
+    setRemovedExistingIds((prev) => (prev.includes(photoId) ? prev : [...prev, photoId]));
+    setMainKey((cur) => (cur === `existing:${photoId}` ? null : cur));
+  }
+
+  function removeNewPhoto(key) {
+    setNewPhotos((prev) => {
+      const target = prev.find((p) => p.key === key);
+      if (target) {
+        try { URL.revokeObjectURL(target.previewUrl); } catch {}
+      }
+      return prev.filter((p) => p.key !== key);
+    });
+    setMainKey((cur) => (cur === `new:${key}` ? null : cur));
+  }
+
+  function selectMain(key) {
+    setMainKey(key);
+  }
+
   async function onSave() {
     if (!canSave || !appUser?.id) return;
+    if (!photosOk) {
+      setError(
+        totalPhotos < MIN_PHOTOS
+          ? `Envie pelo menos ${MIN_PHOTOS} fotos.`
+          : `Máximo de ${MAX_PHOTOS} fotos.`
+      );
+      return;
+    }
+    if (!mainKey) {
+      setError('Selecione uma foto principal.');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
+      // 1) Upload das novas fotos
+      const uploaded = []; // [{ key, url }]
+      for (const [i, item] of newPhotos.entries()) {
+        const path = `${id}/${Date.now()}-${i}-${slugify(item.file.name)}`;
+        const { error: upErr } = await supabase.storage
+          .from(PHOTOS_BUCKET)
+          .upload(path, item.file, { cacheControl: '3600', upsert: false });
+        if (upErr) throw new Error(`Falha ao enviar foto: ${upErr.message}`);
+        const { data } = supabase.storage.from(PHOTOS_BUCKET).getPublicUrl(path);
+        uploaded.push({ key: item.key, url: data.publicUrl });
+      }
+
+      // 2) URL da foto principal
+      let foto_principal_url = null;
+      if (mainKey.startsWith('existing:')) {
+        const pid = mainKey.slice('existing:'.length);
+        foto_principal_url = existingPhotos.find((p) => p.id === pid)?.url || null;
+      } else if (mainKey.startsWith('new:')) {
+        const k = mainKey.slice('new:'.length);
+        foto_principal_url = uploaded.find((u) => u.key === k)?.url || null;
+      }
+
+      // 3) Delete fotos removidas: storage + tabela
+      if (removedExistingIds.length) {
+        const removedRows = existingPhotos.filter((p) => removedExistingIds.includes(p.id));
+        const paths = removedRows.map((p) => extractStoragePath(p.url)).filter(Boolean);
+        if (paths.length) {
+          await supabase.storage.from(PHOTOS_BUCKET).remove(paths);
+        }
+        const { error: delErr } = await supabase
+          .from('listing_photos')
+          .delete()
+          .in('id', removedExistingIds);
+        if (delErr) throw new Error(delErr.message);
+      }
+
+      // 4) Insere novas fotos (ordem definida abaixo via update)
+      if (uploaded.length) {
+        const rows = uploaded.map((u) => ({
+          listing_id: id,
+          url: u.url,
+          ordem: 999,
+        }));
+        const { error: insErr } = await supabase.from('listing_photos').insert(rows);
+        if (insErr) throw new Error(insErr.message);
+      }
+
+      // 5) Re-busca fotos pra atribuir ordem (principal = 0, demais = 1..N)
+      const { data: allPhotos, error: refetchErr } = await supabase
+        .from('listing_photos')
+        .select('id, url')
+        .eq('listing_id', id);
+      if (refetchErr) throw new Error(refetchErr.message);
+
+      const ordered = [...(allPhotos || [])].sort((a, b) => {
+        if (a.url === foto_principal_url) return -1;
+        if (b.url === foto_principal_url) return 1;
+        return 0;
+      });
+      await Promise.all(
+        ordered.map((p, i) =>
+          supabase.from('listing_photos').update({ ordem: i }).eq('id', p.id)
+        )
+      );
+
+      // 6) Atualiza o listing (campos + foto_principal_url)
       const versaoCombinada =
         [form.motorizacao.trim(), form.versao.trim()].filter(Boolean).join(' ') || null;
       const payload = {
@@ -209,16 +385,15 @@ function Inner() {
         cidade: form.cidade.trim() || null,
         estado: form.estado || null,
         descricao: form.descricao.trim() || null,
+        foto_principal_url,
         updated_at: new Date().toISOString(),
       };
-      console.log('cambio sendo enviado:', form.cambio);
-      console.log('cambio no payload:', payload.cambio);
-      console.log('todos os valores do payload:', JSON.stringify(payload));
       const { error: upErr } = await supabase
         .from('listings')
         .update(payload)
         .eq('id', id);
       if (upErr) throw new Error(upErr.message);
+
       router.push('/meus-anuncios');
       router.refresh();
     } catch (e) {
@@ -480,6 +655,108 @@ function Inner() {
           </Field>
         </section>
 
+        <section className="card space-y-4 p-4">
+          <header>
+            <h2 className="display text-lg text-white">Fotos</h2>
+            <p className="text-xs text-slate-400">
+              Mínimo {MIN_PHOTOS}, máximo {MAX_PHOTOS}. Toque numa foto para marcar como principal.
+            </p>
+          </header>
+
+          <label className="grid cursor-pointer place-items-center gap-1 rounded-2xl border-2 border-dashed border-outline bg-page py-8 text-center hover:border-brand-500/50">
+            <span className="text-sm font-medium text-slate-200">Adicionar fotos</span>
+            <span className="text-xs text-slate-500">PNG, JPG ou WEBP — até 5MB cada</span>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleFilesPick}
+              className="hidden"
+              disabled={totalPhotos >= MAX_PHOTOS}
+            />
+          </label>
+
+          <p className={`text-[11px] ${photosOk ? 'text-slate-400' : 'text-red-400'}`}>
+            {totalPhotos}/{MAX_PHOTOS} fotos {totalPhotos < MIN_PHOTOS && `(mínimo ${MIN_PHOTOS})`}
+          </p>
+
+          {(visibleExisting.length > 0 || newPhotos.length > 0) && (
+            <div className="grid grid-cols-3 gap-2">
+              {visibleExisting.map((p) => {
+                const key = `existing:${p.id}`;
+                const isMain = mainKey === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => selectMain(key)}
+                    className={`relative aspect-square overflow-hidden rounded-lg border ${
+                      isMain ? 'border-brand-500 ring-2 ring-brand-500/40' : 'border-outline'
+                    }`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p.url} alt="" className="h-full w-full object-cover" />
+                    {isMain && (
+                      <span className="absolute left-1 top-1 rounded bg-brand-500 px-1.5 py-0.5 text-[10px] font-bold uppercase text-black">
+                        Principal
+                      </span>
+                    )}
+                    <span
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        removeExistingPhoto(p.id);
+                      }}
+                      className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-black/70 text-xs text-white"
+                      role="button"
+                    >
+                      ×
+                    </span>
+                  </button>
+                );
+              })}
+              {newPhotos.map((p) => {
+                const key = `new:${p.key}`;
+                const isMain = mainKey === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => selectMain(key)}
+                    className={`relative aspect-square overflow-hidden rounded-lg border ${
+                      isMain ? 'border-brand-500 ring-2 ring-brand-500/40' : 'border-outline'
+                    }`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p.previewUrl} alt={p.file.name} className="h-full w-full object-cover" />
+                    {isMain && (
+                      <span className="absolute left-1 top-1 rounded bg-brand-500 px-1.5 py-0.5 text-[10px] font-bold uppercase text-black">
+                        Principal
+                      </span>
+                    )}
+                    <span className="absolute bottom-1 left-1 rounded bg-emerald-500/90 px-1.5 py-0.5 text-[10px] font-bold uppercase text-black">
+                      Nova
+                    </span>
+                    <span
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        removeNewPhoto(p.key);
+                      }}
+                      className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-black/70 text-xs text-white"
+                      role="button"
+                    >
+                      ×
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {photoError && (
+            <p className="text-xs text-red-400">{photoError}</p>
+          )}
+        </section>
+
         {error && (
           <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
             {error}
@@ -498,7 +775,7 @@ function Inner() {
           <button
             type="button"
             onClick={onSave}
-            disabled={!canSave || saving}
+            disabled={!canSave || !photosOk || saving}
             className="btn-primary flex-1"
           >
             {saving ? 'Salvando…' : 'Salvar alterações'}
