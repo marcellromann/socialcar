@@ -105,39 +105,39 @@ function Inner() {
     let cancel = false;
     (async () => {
       setLoading(true);
-      const { data } = await supabase
+      const { data: listing, error: fetchErr } = await supabase
         .from('listings')
-        .select('id, user_id, marca, modelo, versao, ano, km, preco, combustivel, cambio, cor, cidade, estado, descricao')
+        .select('*')
         .eq('id', id)
-        .maybeSingle();
+        .single();
       if (cancel) return;
-      if (!data || data.user_id !== appUser.id) {
+      if (fetchErr || !listing || listing.user_id !== appUser.id) {
         setNotFound(true);
         setLoading(false);
         return;
       }
-      const { motorizacao, versao } = splitVersao(data.versao);
+      const { motorizacao, versao } = splitVersao(listing.versao);
       const cap = (s) => (s ? capitalizeWords(s) : '');
-      const knownMarca = MARCAS_FIPE.some((m) => m.nome === data.marca);
-      const knownModelo = knownMarca && MODELOS_POR_MARCA[data.marca]?.includes(data.modelo);
+      const knownMarca = MARCAS_FIPE.some((m) => m.nome === listing.marca);
+      const knownModelo = knownMarca && MODELOS_POR_MARCA[listing.marca]?.includes(listing.modelo);
       const knownMoto = MOTORIZACOES_COMUNS.some((m) => m.toLowerCase() === motorizacao.toLowerCase());
-      setMarcaCustom(!knownMarca && !!data.marca);
-      setModeloCustom(!knownModelo && !!data.modelo);
+      setMarcaCustom(!knownMarca && !!listing.marca);
+      setModeloCustom(!knownModelo && !!listing.modelo);
       setMotorizacaoCustom(!knownMoto && !!motorizacao);
       setForm({
-        marca: data.marca || '',
-        modelo: data.modelo || '',
+        marca: listing.marca || '',
+        modelo: listing.modelo || '',
         motorizacao,
         versao,
-        ano: data.ano ? String(data.ano) : '',
-        km: data.km != null ? String(data.km) : '',
-        combustivel: cap(data.combustivel),
-        cambio: cap(data.cambio),
-        cor: data.cor || '',
-        cidade: data.cidade || '',
-        estado: data.estado || '',
-        preco: data.preco != null ? String(Math.round(Number(data.preco))) : '',
-        descricao: data.descricao || '',
+        ano: listing.ano ? String(listing.ano) : '',
+        km: listing.km != null ? String(listing.km) : '',
+        combustivel: cap(listing.combustivel),
+        cambio: cap(listing.cambio),
+        cor: listing.cor || '',
+        cidade: listing.cidade || '',
+        estado: listing.estado || '',
+        preco: listing.preco != null ? String(Math.round(Number(listing.preco))) : '',
+        descricao: listing.descricao || '',
       });
       setLoading(false);
     })();
@@ -211,6 +211,8 @@ function Inner() {
         descricao: form.descricao.trim() || null,
         updated_at: new Date().toISOString(),
       };
+      console.log('cambio sendo enviado:', form.cambio);
+      console.log('payload completo:', payload);
       const { error: upErr } = await supabase
         .from('listings')
         .update(payload)
