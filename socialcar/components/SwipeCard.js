@@ -83,7 +83,8 @@ export default function SwipeCard({ listing, onSwipe, depth = 0, userEstado = nu
           <img
             src={listing.foto_principal_url}
             alt={`${listing.marca} ${listing.modelo}`}
-            className="h-full w-full object-cover"
+            className="h-full w-full"
+            style={{ objectFit: 'contain', background: '#0D1102' }}
             draggable={false}
           />
         ) : (
