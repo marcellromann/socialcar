@@ -52,15 +52,9 @@ function Inner() {
         <section className="card border-yellow-500/30 bg-yellow-500/5 p-4">
           <div className="flex items-start gap-3">
             <div className="text-2xl">🚧</div>
-            <div className="space-y-1">
-              <p className="font-display text-base font-bold text-white">
-                Pagamento em breve
-              </p>
-              <p className="text-sm text-slate-300">
-                Estamos integrando o Mercado Pago. Em breve você poderá destacar
-                seu anúncio diretamente pelo app.
-              </p>
-            </div>
+            <p className="text-sm text-slate-300">
+              Em breve você poderá destacar seu anúncio.
+            </p>
           </div>
         </section>
 
