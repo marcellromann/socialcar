@@ -702,10 +702,10 @@ function Step2Vehicle({
             required
           >
             <option value="">Selecionar marca</option>
+            <option value={MARCA_OUTRA}>Outra marca</option>
             {MARCAS_FIPE.map((m) => (
               <option key={m.codigo} value={m.nome}>{m.nome}</option>
             ))}
-            <option value={MARCA_OUTRA}>Outra marca</option>
           </select>
         )}
       </Field>
@@ -739,10 +739,10 @@ function Step2Vehicle({
             required
           >
             <option value="">Selecionar modelo</option>
+            <option value={MODELO_OUTRO}>Outro modelo</option>
             {knownModels.map((m) => (
               <option key={m} value={m}>{m}</option>
             ))}
-            <option value={MODELO_OUTRO}>Outro modelo</option>
           </select>
         )}
       </Field>
