@@ -1065,7 +1065,7 @@ function Step4Review({
         )}
       </section>
 
-      <section className="card relative space-y-3 p-4" style={{ border: '1px solid #AAFF00' }}>
+      <section className="card relative space-y-3 p-4" style={{ border: '1px solid #00CC00' }}>
         <span className="absolute -top-2 left-4 inline-flex items-center gap-1 rounded-full bg-brand-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-black">
           ⭐ Recomendado
         </span>

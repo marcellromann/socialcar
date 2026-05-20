@@ -9,7 +9,7 @@ Stack: **Next.js 14 (App Router) · Tailwind · Supabase**.
 
 ## Identidade visual
 
-- Fundo `#060801`, cor de marca `#AAFF00` (verde limão), textos brancos.
+- Fundo `#060801`, cor de marca `#00CC00` (Python Green), textos brancos.
 - Fontes: **Barlow Condensed** (títulos) e **Barlow** (corpo).
 - Layout 100% mobile-first, container central de até **480px**.
 
