@@ -60,8 +60,7 @@ export function simulatePayment(price, months = 60) {
 export const FAIXAS_PRECO = [
   { id: 'ate_50k', label: 'até R$ 50 mil' },
   { id: '50k_100k', label: 'R$ 50–100 mil' },
-  { id: '100k_150k', label: 'R$ 100–150 mil' },
-  { id: '150k_200k', label: 'R$ 150–200 mil' },
+  { id: '100k_200k', label: 'R$ 100 mil – R$ 200 mil' },
   { id: '200k_300k', label: 'R$ 200–300 mil' },
   { id: '300k_500k', label: 'R$ 300–500 mil' },
   { id: '500k_1M', label: 'R$ 500 mil – R$ 1 milhão' },
