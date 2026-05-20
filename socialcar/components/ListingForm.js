@@ -7,14 +7,6 @@ import { hashPlate, isValidPlate, maskPlate, normalizePlate } from '@/lib/plate'
 import { useAuth } from '@/lib/auth';
 import { computeVerification } from '@/lib/verification';
 import { DESTAQUE_PLANOS } from '@/components/DestaqueModal';
-import {
-  MARCAS_FIPE,
-  MODELOS_POR_MARCA,
-  MOTORIZACOES_COMUNS,
-  MARCA_OUTRA,
-  MODELO_OUTRO,
-  MOTORIZACAO_OUTRA,
-} from '@/lib/marcas';
 
 const MAX_PHOTOS = 15;
 const MIN_PHOTOS = 3;
@@ -157,9 +149,6 @@ export default function ListingForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [plateState, setPlateState] = useState({ status: 'idle', message: '' });
-  const [marcaCustom, setMarcaCustom] = useState(false);
-  const [modeloCustom, setModeloCustom] = useState(false);
-  const [motorizacaoCustom, setMotorizacaoCustom] = useState(false);
   const [destaquePlano, setDestaquePlano] = useState(null);
   const [submittingPath, setSubmittingPath] = useState(null); // null | 'destaque' | 'free'
 
@@ -185,43 +174,6 @@ export default function ListingForm() {
       if (max) digits = digits.slice(0, max);
       setForm((f) => ({ ...f, [field]: digits }));
     };
-  }
-
-  function setFields(patch) {
-    setForm((f) => ({ ...f, ...patch }));
-  }
-
-  function handleMarcaSelect(value) {
-    if (value === MARCA_OUTRA) {
-      setMarcaCustom(true);
-      setModeloCustom(false);
-      setMotorizacaoCustom(false);
-      setFields({ marca: '', modelo: '', motorizacao: '' });
-      return;
-    }
-    setMarcaCustom(false);
-    setModeloCustom(false);
-    setFields({ marca: value, modelo: '' });
-  }
-
-  function handleModeloSelect(value) {
-    if (value === MODELO_OUTRO) {
-      setModeloCustom(true);
-      setFields({ modelo: '' });
-      return;
-    }
-    setModeloCustom(false);
-    setFields({ modelo: value });
-  }
-
-  function handleMotorizacaoSelect(value) {
-    if (value === MOTORIZACAO_OUTRA) {
-      setMotorizacaoCustom(true);
-      setFields({ motorizacao: '' });
-      return;
-    }
-    setMotorizacaoCustom(false);
-    setFields({ motorizacao: value });
   }
 
   // ─── Step 1: validação em tempo real da placa ──────────────────────────────
@@ -478,26 +430,6 @@ export default function ListingForm() {
           updateCap={updateCap}
           updateDigits={updateDigits}
           fieldErrors={fieldErrors}
-          marcaCustom={marcaCustom}
-          modeloCustom={modeloCustom}
-          motorizacaoCustom={motorizacaoCustom}
-          onMarcaSelect={handleMarcaSelect}
-          onModeloSelect={handleModeloSelect}
-          onMotorizacaoSelect={handleMotorizacaoSelect}
-          onResetMarca={() => {
-            setMarcaCustom(false);
-            setModeloCustom(false);
-            setMotorizacaoCustom(false);
-            setFields({ marca: '', modelo: '', motorizacao: '' });
-          }}
-          onResetModelo={() => {
-            setModeloCustom(false);
-            setFields({ modelo: '' });
-          }}
-          onResetMotorizacao={() => {
-            setMotorizacaoCustom(false);
-            setFields({ motorizacao: '' });
-          }}
         />
       )}
 
@@ -643,31 +575,14 @@ function Step1Plate({ placa, onChange, formatErro, plateState }) {
 }
 
 // ─── Step 2 ──────────────────────────────────────────────────────────────────
-function Step2Vehicle({
-  form,
-  update,
-  updateCap,
-  updateDigits,
-  fieldErrors,
-  marcaCustom,
-  modeloCustom,
-  motorizacaoCustom,
-  onMarcaSelect,
-  onModeloSelect,
-  onMotorizacaoSelect,
-  onResetMarca,
-  onResetModelo,
-  onResetMotorizacao,
-}) {
+function Step2Vehicle({ form, update, updateCap, updateDigits, fieldErrors }) {
   const precoFormatado = form.preco
     ? `R$ ${Number(form.preco).toLocaleString('pt-BR')}`
     : '';
 
   const v = (field) => isFieldValid(form, field);
   const e = (field) => fieldErrors[field];
-
-  const knownModels = MODELOS_POR_MARCA[form.marca];
-  const marcaSelectValue = marcaCustom ? MARCA_OUTRA : form.marca;
+  const capitalizeStyle = { textTransform: 'capitalize' };
 
   return (
     <section className="card space-y-4 p-4">
@@ -677,116 +592,46 @@ function Step2Vehicle({
       </header>
 
       <Field label="Marca" error={e('marca')}>
-        {marcaCustom ? (
-          <div className="space-y-2">
-            <input
-              className={inputCls({ error: e('marca'), valid: v('marca') })}
-              value={form.marca}
-              onChange={updateCap('marca')}
-              placeholder="Digite a marca do seu veículo"
-              required
-            />
-            <button
-              type="button"
-              onClick={onResetMarca}
-              className="text-[11px] font-bold uppercase tracking-wide text-brand-500 active:opacity-80"
-            >
-              ← Voltar
-            </button>
-          </div>
-        ) : (
-          <select
-            className={inputCls({ error: e('marca'), valid: v('marca') })}
-            value={marcaSelectValue}
-            onChange={(ev) => onMarcaSelect(ev.target.value)}
-            required
-          >
-            <option value="">Selecionar marca</option>
-            <option value={MARCA_OUTRA}>Outra marca</option>
-            {MARCAS_FIPE.map((m) => (
-              <option key={m.codigo} value={m.nome}>{m.nome}</option>
-            ))}
-          </select>
-        )}
+        <input
+          type="text"
+          className={inputCls({ error: e('marca'), valid: v('marca') })}
+          style={capitalizeStyle}
+          value={form.marca}
+          onChange={updateCap('marca')}
+          placeholder="Ex: Volkswagen, Toyota, BMW"
+          required
+        />
       </Field>
 
       <Field label="Modelo" error={e('modelo')}>
-        {marcaCustom || !knownModels || modeloCustom ? (
-          <div className="space-y-2">
-            <input
-              className={inputCls({ error: e('modelo'), valid: v('modelo') })}
-              value={form.modelo}
-              onChange={updateCap('modelo')}
-              placeholder={form.marca ? 'Ex: Corolla, Civic, Onix' : 'Selecione a marca primeiro'}
-              disabled={!marcaCustom && !form.marca}
-              required
-            />
-            {knownModels && modeloCustom && (
-              <button
-                type="button"
-                onClick={onResetModelo}
-                className="text-[11px] font-bold uppercase tracking-wide text-brand-500 active:opacity-80"
-              >
-                ← Voltar
-              </button>
-            )}
-          </div>
-        ) : (
-          <select
-            className={inputCls({ error: e('modelo'), valid: v('modelo') })}
-            value={form.modelo}
-            onChange={(ev) => onModeloSelect(ev.target.value)}
-            required
-          >
-            <option value="">Selecionar modelo</option>
-            <option value={MODELO_OUTRO}>Outro modelo</option>
-            {knownModels.map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
-        )}
+        <input
+          type="text"
+          className={inputCls({ error: e('modelo'), valid: v('modelo') })}
+          style={capitalizeStyle}
+          value={form.modelo}
+          onChange={updateCap('modelo')}
+          placeholder="Ex: Polo, Corolla, X5"
+          required
+        />
       </Field>
 
       <Field label="Motorização" error={e('motorizacao')}>
-        {motorizacaoCustom ? (
-          <div className="space-y-2">
-            <input
-              className={inputCls({ error: e('motorizacao'), valid: v('motorizacao') })}
-              value={form.motorizacao}
-              onChange={updateCap('motorizacao')}
-              placeholder="Ex: 1.0 TSI, 2.0 Flex, 1.6 16V"
-              required
-            />
-            <button
-              type="button"
-              onClick={onResetMotorizacao}
-              className="text-[11px] font-bold uppercase tracking-wide text-brand-500 active:opacity-80"
-            >
-              ← Voltar
-            </button>
-          </div>
-        ) : (
-          <select
-            className={inputCls({ error: e('motorizacao'), valid: v('motorizacao') })}
-            value={form.motorizacao}
-            onChange={(ev) => onMotorizacaoSelect(ev.target.value)}
-            disabled={!form.modelo}
-            required
-          >
-            <option value="">
-              {form.modelo ? 'Selecionar motorização' : 'Selecione o modelo primeiro'}
-            </option>
-            {MOTORIZACOES_COMUNS.map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-            <option value={MOTORIZACAO_OUTRA}>Outra motorização</option>
-          </select>
-        )}
+        <input
+          type="text"
+          className={inputCls({ error: e('motorizacao'), valid: v('motorizacao') })}
+          style={capitalizeStyle}
+          value={form.motorizacao}
+          onChange={updateCap('motorizacao')}
+          placeholder="Ex: 1.0 TSI, 2.0 Flex, 3.0 TDI"
+          required
+        />
       </Field>
 
       <Field label="Versão">
         <input
+          type="text"
           className={inputCls({ valid: !!form.versao.trim() })}
+          style={capitalizeStyle}
           value={form.versao}
           onChange={updateCap('versao')}
           placeholder="Ex: Highline, XEi, Comfort (opcional)"
@@ -819,41 +664,34 @@ function Step2Vehicle({
         />
       </Field>
 
-      <Field label="Combustível">
-        <select
-          className={inputCls({ valid: v('combustivel') })}
+      <Field label="Combustível" error={e('combustivel')}>
+        <input
+          type="text"
+          className={inputCls({ error: e('combustivel'), valid: v('combustivel') })}
+          style={capitalizeStyle}
           value={form.combustivel}
-          onChange={update('combustivel')}
+          onChange={updateCap('combustivel')}
+          placeholder="Ex: Flex, Gasolina, Diesel, Elétrico"
           required
-        >
-          <option value="">Selecione</option>
-          <option value="Flex">Flex</option>
-          <option value="Gasolina">Gasolina</option>
-          <option value="Diesel">Diesel</option>
-          <option value="Elétrico">Elétrico</option>
-          <option value="Híbrido">Híbrido</option>
-          <option value="Etanol">Etanol</option>
-        </select>
+        />
       </Field>
 
-      <Field label="Câmbio">
-        <select
-          className={inputCls({ valid: v('cambio') })}
+      <Field label="Câmbio" error={e('cambio')}>
+        <input
+          type="text"
+          className={inputCls({ error: e('cambio'), valid: v('cambio') })}
+          style={capitalizeStyle}
           value={form.cambio}
-          onChange={update('cambio')}
+          onChange={updateCap('cambio')}
+          placeholder="Ex: Manual, Automático, CVT"
           required
-        >
-          <option value="">Selecione</option>
-          <option value="Manual">Manual</option>
-          <option value="Automático">Automático</option>
-          <option value="CVT">CVT</option>
-          <option value="Automatizado">Automatizado</option>
-        </select>
+        />
       </Field>
 
       <Field label="Cor" error={e('cor')}>
         <input
           className={inputCls({ error: e('cor'), valid: v('cor') })}
+          style={capitalizeStyle}
           value={form.cor}
           onChange={updateCap('cor')}
           placeholder="Ex: Prata, Preto, Branco"
@@ -864,6 +702,7 @@ function Step2Vehicle({
       <Field label="Cidade" error={e('cidade')}>
         <input
           className={inputCls({ error: e('cidade'), valid: v('cidade') })}
+          style={capitalizeStyle}
           value={form.cidade}
           onChange={updateCap('cidade')}
           placeholder="Ex: São Paulo"

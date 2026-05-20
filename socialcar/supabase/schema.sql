@@ -125,8 +125,8 @@ create table if not exists public.listings (
   versao             text,
   km                 int  not null check (km >= 0),
   preco              numeric(12,2) not null check (preco >= 0),
-  combustivel        text check (combustivel in ('gasolina','etanol','flex','diesel','eletrico','hibrido')),
-  cambio             text check (cambio in ('manual','automatica','semi-automatica','cvt')),
+  combustivel        text,
+  cambio             text,
   cor                text,
   descricao          text,
   acessorios         text[] default '{}',
@@ -143,11 +143,10 @@ create index if not exists listings_status_idx     on public.listings (status);
 create index if not exists listings_created_at_idx on public.listings (created_at desc);
 create index if not exists listings_user_id_idx    on public.listings (user_id);
 
--- Mantém a check de combustivel sincronizada em tabelas já existentes.
+-- Remove constraints de combustivel e cambio para permitir valores livres digitados pelo usuário.
 do $$ begin
   alter table public.listings drop constraint if exists listings_combustivel_check;
-  alter table public.listings add constraint listings_combustivel_check
-    check (combustivel in ('gasolina','etanol','flex','diesel','eletrico','hibrido'));
+  alter table public.listings drop constraint if exists listings_cambio_check;
 end $$;
 
 -- Motivo de exclusão e timestamp da exclusão.
