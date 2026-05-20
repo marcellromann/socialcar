@@ -17,7 +17,7 @@ export default function BuscarPage() {
       setLoading(true);
       const base = supabase
         .from('listings_public')
-        .select('id, marca, modelo, ano, km, preco, foto_principal_url, cidade, estado, verificado, destaque, destaque_expira_em')
+        .select('id, marca, modelo, ano, km, preco, foto_principal_url, cidade, estado, verificado, destaque, destaque_expira_em, zero_km')
         .eq('status', 'ativo')
         .order('destaque', { ascending: false })
         .order('created_at', { ascending: false })
@@ -27,7 +27,7 @@ export default function BuscarPage() {
       if (error) {
         const fb = await supabase
           .from('listings')
-          .select('id, marca, modelo, ano, km, preco, foto_principal_url, cidade, estado, verificado, destaque, destaque_expira_em')
+          .select('id, marca, modelo, ano, km, preco, foto_principal_url, cidade, estado, verificado, destaque, destaque_expira_em, zero_km')
           .eq('status', 'ativo')
           .is('deleted_at', null)
           .order('destaque', { ascending: false })

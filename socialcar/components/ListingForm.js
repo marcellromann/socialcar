@@ -66,6 +66,7 @@ const REQUIRED_STEP2 = [
 
 const initialForm = {
   placa: '',
+  zero_km: false,
   marca: '',
   modelo: '',
   motorizacao: '',
@@ -107,7 +108,7 @@ function capitalizeWords(s) {
 function getFieldErrors(form) {
   const e = {};
   if (form.ano && !/^\d{4}$/.test(form.ano)) e.ano = 'Informe o ano com 4 dígitos.';
-  if (form.km) {
+  if (!form.zero_km && form.km) {
     if (!/^\d+$/.test(form.km) || form.km.length < 2 || form.km.length > 6) {
       e.km = 'Quilometragem inválida.';
     }
@@ -126,6 +127,7 @@ function getFieldErrors(form) {
 }
 
 function isFieldValid(form, field) {
+  if (field === 'km' && form.zero_km) return true;
   const v = form[field];
   if (typeof v === 'string' && !v.trim()) return false;
   if (!v) return false;
@@ -178,14 +180,35 @@ export default function ListingForm() {
 
   // ─── Step 1: validação em tempo real da placa ──────────────────────────────
   const placaNorm = normalizePlate(form.placa);
-  const placaFormatoOk = placaNorm.length === 7 && isValidPlate(placaNorm);
+  const isZeroKm = !!form.zero_km;
+  const placaInformada = placaNorm.length > 0;
+  const placaFormatoOk = isZeroKm
+    ? (!placaInformada || (placaNorm.length === 7 && isValidPlate(placaNorm)))
+    : (placaNorm.length === 7 && isValidPlate(placaNorm));
+  const podeAvancarStep1 = isZeroKm
+    ? (!placaInformada || (placaNorm.length === 7 && isValidPlate(placaNorm)))
+    : placaFormatoOk;
   const placaFormatoErro =
     placaNorm.length >= 7 && !isValidPlate(placaNorm)
       ? 'Formato inválido. Use ABC1234 ou ABC1D23.'
       : '';
 
+  function toggleZeroKm(checked) {
+    setForm((f) => ({
+      ...f,
+      zero_km: checked,
+      km: checked ? '0' : (f.km === '0' ? '' : f.km),
+    }));
+    setPlateState({ status: 'idle', message: '' });
+  }
+
   async function validatePlateAndAdvance() {
     setError(null);
+    if (isZeroKm && !placaInformada) {
+      setPlateState({ status: 'ok', message: 'Veículo zero km — placa opcional.' });
+      setStep(2);
+      return;
+    }
     if (!placaFormatoOk) {
       setPlateState({ status: 'error', message: 'Formato inválido. Use ABC1234 ou ABC1D23.' });
       return;
@@ -307,7 +330,9 @@ export default function ListingForm() {
         throw new Error('Perfil não encontrado em public.users. Refaça o cadastro ou entre novamente.');
       }
 
-      const placa_hash = await hashPlate(placaNorm);
+      const placa_hash = (isZeroKm && !placaInformada)
+        ? `zero-km:${crypto.randomUUID()}`
+        : await hashPlate(placaNorm);
       const draftId = crypto.randomUUID();
       const photoUrls = await uploadPhotos(draftId);
       const main = photoUrls[mainIdx] || photoUrls[0];
@@ -319,7 +344,7 @@ export default function ListingForm() {
         marca: form.marca.trim(),
         modelo: form.modelo.trim(),
         ano: Number(form.ano),
-        km: Number(form.km),
+        km: isZeroKm ? 0 : Number(form.km),
         preco: Number(form.preco),
         combustivel: form.combustivel || null,
         cambio: form.cambio || null,
@@ -353,6 +378,7 @@ export default function ListingForm() {
         versao: versaoCombinada,
         status: 'ativo',
         verificado: verification.passed,
+        zero_km: isZeroKm,
         ...destaqueFields,
       };
 
@@ -420,6 +446,8 @@ export default function ListingForm() {
           }}
           formatErro={placaFormatoErro}
           plateState={plateState}
+          zeroKm={isZeroKm}
+          onZeroKmChange={toggleZeroKm}
         />
       )}
 
@@ -430,6 +458,7 @@ export default function ListingForm() {
           updateCap={updateCap}
           updateDigits={updateDigits}
           fieldErrors={fieldErrors}
+          zeroKm={isZeroKm}
         />
       )}
 
@@ -472,7 +501,7 @@ export default function ListingForm() {
           <button
             type="button"
             onClick={validatePlateAndAdvance}
-            disabled={!placaFormatoOk || plateState.status === 'checking'}
+            disabled={!podeAvancarStep1 || plateState.status === 'checking'}
             className="btn-primary flex-1"
           >
             {plateState.status === 'checking' ? 'Verificando…' : 'Continuar'}
@@ -537,7 +566,7 @@ function Stepper({ current }) {
 }
 
 // ─── Step 1 ──────────────────────────────────────────────────────────────────
-function Step1Plate({ placa, onChange, formatErro, plateState }) {
+function Step1Plate({ placa, onChange, formatErro, plateState, zeroKm, onZeroKmChange }) {
   return (
     <section className="card space-y-3 p-4">
       <header>
@@ -548,13 +577,13 @@ function Step1Plate({ placa, onChange, formatErro, plateState }) {
         </p>
       </header>
       <input
-        className="input uppercase tracking-widest"
+        className="input uppercase tracking-widest disabled:cursor-not-allowed disabled:opacity-50"
         maxLength={8}
-        placeholder="ABC1D23"
+        placeholder={zeroKm ? 'Opcional para zero km' : 'ABC1D23'}
         value={maskPlate(placa)}
         onChange={(e) => onChange(e.target.value)}
         autoComplete="off"
-        required
+        required={!zeroKm}
       />
       {formatErro && <p className="text-xs text-red-400">{formatErro}</p>}
       {plateState.message && !formatErro && (
@@ -570,12 +599,27 @@ function Step1Plate({ placa, onChange, formatErro, plateState }) {
           {plateState.message}
         </p>
       )}
+
+      <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-outline bg-page p-3 transition hover:border-brand-500/40">
+        <input
+          type="checkbox"
+          checked={!!zeroKm}
+          onChange={(e) => onZeroKmChange(e.target.checked)}
+          className="mt-0.5 h-4 w-4 cursor-pointer accent-brand-500"
+        />
+        <span className="flex-1">
+          <span className="block text-sm font-semibold text-white">Veículo zero km (0 km)</span>
+          <span className="block text-[11px] text-slate-400">
+            Marque se o carro ainda não foi emplacado. A placa fica opcional e a quilometragem é fixada em 0.
+          </span>
+        </span>
+      </label>
     </section>
   );
 }
 
 // ─── Step 2 ──────────────────────────────────────────────────────────────────
-function Step2Vehicle({ form, update, updateCap, updateDigits, fieldErrors }) {
+function Step2Vehicle({ form, update, updateCap, updateDigits, fieldErrors, zeroKm }) {
   const precoFormatado = form.preco
     ? `R$ ${Number(form.preco).toLocaleString('pt-BR')}`
     : '';
@@ -653,15 +697,19 @@ function Step2Vehicle({ form, update, updateCap, updateDigits, fieldErrors }) {
 
       <Field label="Quilometragem (km)" error={e('km')}>
         <input
-          className={inputCls({ error: e('km'), valid: v('km') })}
+          className={`${inputCls({ error: e('km'), valid: v('km') })} disabled:cursor-not-allowed disabled:opacity-60`}
           type="text"
           inputMode="numeric"
           maxLength={6}
-          value={form.km}
+          value={zeroKm ? '0' : form.km}
           onChange={updateDigits('km', 6)}
-          placeholder="Ex: 45000"
+          placeholder={zeroKm ? '0 (zero km)' : 'Ex: 45000'}
+          disabled={zeroKm}
           required
         />
+        {zeroKm && (
+          <p className="mt-1 text-[11px] text-brand-500">Quilometragem fixada em 0 (veículo zero km).</p>
+        )}
       </Field>
 
       <Field label="Combustível" error={e('combustivel')}>

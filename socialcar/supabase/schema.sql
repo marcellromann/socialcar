@@ -158,6 +158,9 @@ alter table public.listings add column if not exists destaque            boolean
 alter table public.listings add column if not exists destaque_expira_em  timestamptz;
 alter table public.listings add column if not exists destaque_plano      text;
 
+-- Veículo zero km: sem placa obrigatória, km fixado em 0.
+alter table public.listings add column if not exists zero_km             boolean not null default false;
+
 create index if not exists listings_destaque_idx
   on public.listings (destaque, destaque_expira_em desc);
 
@@ -294,7 +297,7 @@ create or replace view public.listings_public as
     id, user_id, marca, modelo, ano, versao, km, preco, combustivel, cambio,
     cor, descricao, acessorios, cidade, estado, foto_principal_url,
     status, verificado, created_at, updated_at,
-    destaque, destaque_expira_em, destaque_plano
+    destaque, destaque_expira_em, destaque_plano, zero_km
   from public.listings
   where deleted_at is null;
 

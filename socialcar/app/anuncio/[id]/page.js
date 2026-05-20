@@ -9,7 +9,7 @@ import TopBar from '@/components/TopBar';
 export const revalidate = 0;
 
 const FIELDS =
-  'id, user_id, marca, modelo, ano, versao, km, preco, combustivel, cambio, cor, descricao, acessorios, cidade, estado, foto_principal_url, verificado, created_at';
+  'id, user_id, marca, modelo, ano, versao, km, preco, combustivel, cambio, cor, descricao, acessorios, cidade, estado, foto_principal_url, verificado, created_at, zero_km';
 
 async function fetchListing(id) {
   const { data, error } = await supabase
@@ -65,8 +65,13 @@ export default async function ListingDetailPage({ params }) {
                 Verificado
               </span>
             )}
+            {listing.zero_km && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-black">
+                ✨ 0 KM
+              </span>
+            )}
             <span className="chip">{listing.ano}</span>
-            <span className="chip">{formatKm(listing.km)}</span>
+            <span className="chip">{listing.zero_km ? 'Zero km' : formatKm(listing.km)}</span>
           </div>
           <h1 className="display-tight mt-2 text-3xl font-extrabold text-white">
             {listing.marca} {listing.modelo}

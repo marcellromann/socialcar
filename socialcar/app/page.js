@@ -5,7 +5,7 @@ import TopBar from '@/components/TopBar';
 export const revalidate = 0;
 
 const FEED_FIELDS =
-  'id, user_id, marca, modelo, ano, versao, km, preco, cidade, estado, foto_principal_url, verificado, created_at, destaque, destaque_expira_em';
+  'id, user_id, marca, modelo, ano, versao, km, preco, cidade, estado, foto_principal_url, verificado, created_at, destaque, destaque_expira_em, zero_km';
 
 async function fetchFeed() {
   const { data, error } = await supabase

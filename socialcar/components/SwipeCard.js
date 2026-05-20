@@ -97,10 +97,20 @@ export default function SwipeCard({ listing, onSwipe, depth = 0, userEstado = nu
           </div>
         )}
 
-        {destaqueAtivo && (
-          <div className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-brand-500 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-black shadow-lg shadow-brand-500/30">
-            <span>⭐</span>
-            <span>Destaque</span>
+        {(destaqueAtivo || listing.zero_km) && (
+          <div className="absolute left-3 top-3 flex flex-col items-start gap-1.5">
+            {destaqueAtivo && (
+              <div className="inline-flex items-center gap-1 rounded-full bg-brand-500 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-black shadow-lg shadow-brand-500/30">
+                <span>⭐</span>
+                <span>Destaque</span>
+              </div>
+            )}
+            {listing.zero_km && (
+              <div className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-black shadow-lg shadow-emerald-500/30">
+                <span>✨</span>
+                <span>0 KM</span>
+              </div>
+            )}
           </div>
         )}
 
