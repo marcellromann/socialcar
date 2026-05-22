@@ -9,12 +9,18 @@ export async function GET(request) {
   if (auth.error) return auth.error;
 
   const supabase = getAdminClient();
+  const { searchParams } = new URL(request.url);
+  const estadoRaw = (searchParams.get('estado') || '').trim().toUpperCase();
+  const estado = estadoRaw && estadoRaw.length === 2 ? estadoRaw : null;
 
-  const { data: listings, error } = await supabase
+  let listingsQuery = supabase
     .from('listings')
     .select('id, user_id, marca, modelo, ano, preco, status, created_at')
     .order('created_at', { ascending: false })
     .limit(500);
+  if (estado) listingsQuery = listingsQuery.eq('estado', estado);
+
+  const { data: listings, error } = await listingsQuery;
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

@@ -13,6 +13,11 @@ const STATUS_LABEL = {
   pausado:     { label: 'Pausado',     color: 'bg-red-500/20 text-red-300' },
 };
 
+const ESTADOS_BR = [
+  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG',
+  'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
+];
+
 async function getToken() {
   const { data } = await supabase.auth.getSession();
   return data?.session?.access_token || null;
@@ -34,10 +39,38 @@ export default function AdminDashboard() {
   const [anunciantes, setAnunciantes] = useState([]);
   const [buscaAnuncios, setBuscaAnuncios] = useState('');
   const [buscaAnunciantes, setBuscaAnunciantes] = useState('');
+  const [estadoFiltro, setEstadoFiltro] = useState('');
+  const [filtroBusy, setFiltroBusy] = useState(false);
   const [busy, setBusy] = useState(true);
   const [err, setErr] = useState('');
 
   const role = appUser?.role;
+
+  const withEstado = useCallback((base, estado) => {
+    return estado ? `${base}?estado=${encodeURIComponent(estado)}` : base;
+  }, []);
+
+  // Refaz os três endpoints com o estado dado. Usado tanto no fetchAll
+  // inicial quanto no refetch quando o usuário muda o filtro.
+  const fetchFiltered = useCallback(async (estado) => {
+    setFiltroBusy(true);
+    try {
+      const [r1, r2, r3] = await Promise.all([
+        authedFetch(withEstado('/api/admin/stats', estado)),
+        authedFetch(withEstado('/api/admin/anuncios', estado)),
+        authedFetch(withEstado('/api/admin/anunciantes', estado)),
+      ]);
+      if (!r1.ok || !r2.ok || !r3.ok) return;
+      const [statsJson, anunciosJson, anunciantesJson] = await Promise.all([
+        r1.json(), r2.json(), r3.json(),
+      ]);
+      setStats(statsJson);
+      setAnuncios(anunciosJson.items || []);
+      setAnunciantes(anunciantesJson.items || []);
+    } finally {
+      setFiltroBusy(false);
+    }
+  }, [withEstado]);
 
   const fetchAll = useCallback(async () => {
     setBusy(true);
@@ -53,9 +86,9 @@ export default function AdminDashboard() {
       }
 
       const [r1, r2, r3] = await Promise.all([
-        authedFetch('/api/admin/stats'),
-        authedFetch('/api/admin/anuncios'),
-        authedFetch('/api/admin/anunciantes'),
+        authedFetch(withEstado('/api/admin/stats', estadoFiltro)),
+        authedFetch(withEstado('/api/admin/anuncios', estadoFiltro)),
+        authedFetch(withEstado('/api/admin/anunciantes', estadoFiltro)),
       ]);
       console.log('[admin-ui] respostas API →', {
         stats: r1.status, anuncios: r2.status, anunciantes: r3.status,
@@ -123,6 +156,14 @@ export default function AdminDashboard() {
     }
   }, [loading, user, role, router, fetchAll, appUser]);
 
+  // Quando o filtro de estado muda, refaz stats + anúncios + anunciantes.
+  // Só dispara depois do load inicial (stats já populado).
+  useEffect(() => {
+    if (role !== 'admin' || !stats) return;
+    fetchFiltered(estadoFiltro);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estadoFiltro]);
+
   async function deleteAnuncio(id, titulo) {
     if (!confirm(`Deletar o anúncio "${titulo}"? Essa ação não pode ser desfeita.`)) return;
     const res = await authedFetch(`/api/admin/anuncios/${id}`, { method: 'DELETE' });
@@ -131,8 +172,8 @@ export default function AdminDashboard() {
       return;
     }
     setAnuncios((arr) => arr.filter((x) => x.id !== id));
-    // Recarrega stats sem travar a tela.
-    authedFetch('/api/admin/stats').then((r) => r.ok && r.json().then(setStats));
+    // Recarrega métricas + listas sem travar a tela.
+    fetchFiltered(estadoFiltro);
   }
 
   async function toggleBloqueio(id, nome, atualmenteBloqueado) {
@@ -190,6 +231,37 @@ export default function AdminDashboard() {
 
   return (
     <div className="page-pad space-y-5">
+      <section className="card p-3">
+        <label htmlFor="filtro-estado" className="block text-[10px] font-bold uppercase tracking-wide text-slate-400">
+          Filtrar por estado
+        </label>
+        <div className="mt-2 flex items-center gap-2">
+          <select
+            id="filtro-estado"
+            value={estadoFiltro}
+            onChange={(e) => setEstadoFiltro(e.target.value)}
+            disabled={filtroBusy}
+            className="w-full rounded-xl border border-outline bg-page px-3 py-2.5 text-sm font-bold uppercase tracking-wide text-white focus:border-brand-500 focus:outline-none disabled:opacity-60"
+            aria-label="Filtrar painel por estado"
+          >
+            <option value="">Todos os estados</option>
+            {ESTADOS_BR.map((uf) => (
+              <option key={uf} value={uf}>{uf}</option>
+            ))}
+          </select>
+          {filtroBusy && (
+            <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+              Atualizando…
+            </span>
+          )}
+        </div>
+        {estadoFiltro && (
+          <p className="mt-2 text-[11px] text-slate-400">
+            Exibindo dados de <span className="font-bold text-brand-500">{estadoFiltro}</span> em todas as seções abaixo.
+          </p>
+        )}
+      </section>
+
       <section>
         <h2 className="section-eyebrow mb-2">Métricas</h2>
         <div className="grid grid-cols-2 gap-2">

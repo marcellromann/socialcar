@@ -9,13 +9,20 @@ export async function GET(request) {
   if (auth.error) return auth.error;
 
   const supabase = getAdminClient();
+  const { searchParams } = new URL(request.url);
+  const estadoRaw = (searchParams.get('estado') || '').trim().toUpperCase();
+  const estado = estadoRaw && estadoRaw.length === 2 ? estadoRaw : null;
 
-  const { data: users, error } = await supabase
+  let usersQuery = supabase
     .from('users')
     .select('id, nome, email, tipo, role, bloqueado, created_at')
     .in('tipo', ['vendedor', 'ambos'])
     .order('created_at', { ascending: false })
     .limit(500);
+  // users.estado_endereco é a coluna de UF — preenchida em /perfil.
+  if (estado) usersQuery = usersQuery.eq('estado_endereco', estado);
+
+  const { data: users, error } = await usersQuery;
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
